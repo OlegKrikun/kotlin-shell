@@ -53,9 +53,9 @@ configure<BintrayExtension> {
         repo = "maven"
         name = project.name
         setLicenses("Apache-2.0")
-        websiteUrl = "https://github.com/OlegKrikun/commonmark-java-ktx"
-        issueTrackerUrl = "https://github.com/OlegKrikun/commonmark-java-ktx/issues"
-        vcsUrl = "https://github.com/OlegKrikun/commonmark-java-ktx.git"
+        websiteUrl = "https://github.com/OlegKrikun/kotlin-shell"
+        issueTrackerUrl = "https://github.com/OlegKrikun/kotlin-shell/issues"
+        vcsUrl = "https://github.com/OlegKrikun/kotlin-shell.git"
 
         setPublications("maven")
     }

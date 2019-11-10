@@ -9,7 +9,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.broadcast
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
@@ -126,7 +126,8 @@ private class Worker(
         }
     }
 
-    fun runWithResult(cmd: String) = processOutput.asFlow()
+    fun runWithResult(cmd: String) = processOutput.openSubscription()
+        .consumeAsFlow()
         .onStart { processInput.send(cmd.withEndMarker()) }
         .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() } }
         .takeWhile { it != null }

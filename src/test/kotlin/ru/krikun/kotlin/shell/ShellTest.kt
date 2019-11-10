@@ -40,4 +40,14 @@ class ShellTest {
         assertTrue(result.any { it == "sequentialTest1" })
         assertTrue(result.any { it == "sequentialTest2" })
     }.let(exitCodeCheck)
+
+    @Test
+    fun `flood shell call`() = shell(dir) {
+        "mkdir floodTest"()
+        val range = 1..10000
+        val write = range.map { "echo test > floodTest/floodTest$it" }
+        val read = range.map { "cat floodTest/floodTest$it" }
+        write.forEach { it().let(exitCodeCheck) }
+        read.forEach { it { assertEquals("test", it) }.let(exitCodeCheck) }
+    }.let(exitCodeCheck)
 }

@@ -4,13 +4,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.broadcast
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
@@ -21,7 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.BufferedWriter
 import java.io.File
-import java.io.InputStream
 import java.util.UUID
 import kotlin.system.exitProcess
 
@@ -106,10 +104,10 @@ private class Worker(
 
     private val processOutput = broadcast {
         val stdJob = launch {
-            process.inputStream.asRawFlow { Output.Line(it) }.collect { send(it) }
+            process.inputStream.bufferedReader().lineSequence().forEach { line -> output(line) { Output.Line(it) } }
         }
         val errJob = launch {
-            process.errorStream.asRawFlow { Output.Error(it) }.collect { send(it) }
+            process.errorStream.bufferedReader().lineSequence().forEach { line -> output(line) { Output.Error(it) } }
         }
         awaitClose {
             stdJob.cancel()
@@ -132,7 +130,7 @@ private class Worker(
         .onStart { processInput.send(cmd.withEndMarker()) }
         .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() } }
         .takeWhile { it != null }
-        .transform { it?.let { emit(it) } }
+        .transform { emit(it!!) }
 
     suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Output.ExitCode>().single().data
 
@@ -147,26 +145,14 @@ private class Worker(
         }
     }
 
-    private inline fun InputStream.asRawFlow(crossinline generator: (String) -> Output) = bufferedReader()
-        .lineSequence()
-        .asFlow()
-        .transform { transformLine(it, generator) }
-
-    private suspend inline fun FlowCollector<Output?>.transformLine(
-        line: String,
-        generator: (String) -> Output
-    ) = when {
-        line.contains(endMarker) -> with(line.split(endMarker, limit = 2)) {
-            if (size > 1) {
-                val lineContent = first()
-                if (lineContent.isNotEmpty()) {
-                    emit(generator(first()))
-                }
-            }
-            emit(Output.ExitCode(last().toIntOrNull()))
-            emit(null)
+    private suspend inline fun ProducerScope<Output?>.output(line: String, factory: (String) -> Output) = when {
+        line.contains(endMarker) -> {
+            val list = line.split(endMarker, limit = 2)
+            list.takeIf { it.size > 1 }?.first()?.takeIf { it.isNotEmpty() }?.let { send(factory(it)) }
+            send(Output.ExitCode(list.last().toIntOrNull()))
+            send(null)
         }
-        else -> emit(generator(line))
+        else -> send(factory(line))
     }
 
     private fun BufferedWriter.appendLine(line: String) = apply {

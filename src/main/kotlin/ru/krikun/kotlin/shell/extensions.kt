@@ -14,18 +14,18 @@ fun shell(
     block: suspend Shell.() -> Unit
 ): Int = runBlocking { Shell(workingDir, environment, exitOnError).apply { block() }.exit() }
 
-suspend inline fun Call.result(crossinline action: suspend (String) -> Unit): Int? {
-    return result().collectWithExitCode(action)
+suspend inline fun Call.output(crossinline action: suspend (String) -> Unit): Int? {
+    return output().collectWithExitCode(action)
 }
 
-suspend fun Call.printResult() = result { println(it) }
+suspend fun Call.printOutput() = output { println(it) }
 
 /**
  * Return list of string or null if error code is not success.
  */
 suspend inline fun Call.lines(successErrorCode: Int = 0): List<String>? {
     val list = mutableListOf<String>()
-    return when (result().collectWithExitCode { list.add(it) }) {
+    return when (output().collectWithExitCode { list.add(it) }) {
         successErrorCode -> list
         else -> null
     }

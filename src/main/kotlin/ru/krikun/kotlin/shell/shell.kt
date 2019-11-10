@@ -38,14 +38,14 @@ class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOn
 
     suspend inline operator fun String.invoke(
         crossinline action: suspend (String) -> Unit
-    ): Int? = call(this).result(action)
+    ): Int? = call(this).output(action)
 
     suspend fun String.asUser(user: String): Int? = asUser(user, this).execute()
 
     suspend inline fun String.asUser(
         user: String,
         crossinline action: suspend (String) -> Unit
-    ) = asUser(user, this).result(action)
+    ) = asUser(user, this).output(action)
 }
 
 sealed class Output {
@@ -56,17 +56,17 @@ sealed class Output {
 
 interface Call {
     suspend fun execute(): Int?
-    fun result(): Flow<Output>
+    fun output(): Flow<Output>
 }
 
 private class RegularCall(private val worker: Worker, private val cmd: String) : Call {
     override suspend fun execute() = worker.run(cmd)
-    override fun result() = worker.runWithResult(cmd)
+    override fun output() = worker.runWithResult(cmd)
 }
 
 private class SudoCall(private val worker: Worker, private val user: String, private val cmd: String) : Call {
     override suspend fun execute() = worker.run(cmd.asUser(user))
-    override fun result() = worker.runWithResult(cmd.asUser(user))
+    override fun output() = worker.runWithResult(cmd.asUser(user))
     private fun String.asUser(user: String) = "sudo -u $user $this"
 }
 

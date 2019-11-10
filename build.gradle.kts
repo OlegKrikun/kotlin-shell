@@ -21,7 +21,7 @@ dependencies {
 group = "ru.krikun.kotlin"
 version = "0.0.1"
 
-tasks.getByName<KotlinCompile>("compileKotlin") {
+tasks.withType(KotlinCompile::class) {
     kotlinOptions.freeCompilerArgs = listOf(
         "-XXLanguage:+NewInference",
         "-Xuse-experimental=kotlinx.coroutines.ExperimentalCoroutinesApi",

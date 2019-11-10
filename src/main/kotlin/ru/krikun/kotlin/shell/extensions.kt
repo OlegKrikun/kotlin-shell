@@ -21,12 +21,12 @@ suspend inline fun Call.output(crossinline action: suspend (String) -> Unit): In
 suspend fun Call.printOutput() = output { println(it) }
 
 /**
- * Return list of string or null if error code is not success.
+ * Return list of string or null if exit code is not success.
  */
-suspend inline fun Call.lines(successErrorCode: Int = 0): List<String>? {
+suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
     val list = mutableListOf<String>()
     return when (output().collectWithExitCode { list.add(it) }) {
-        successErrorCode -> list
+        successExitCode -> list
         else -> null
     }
 }

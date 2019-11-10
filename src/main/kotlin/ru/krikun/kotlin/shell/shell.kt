@@ -24,12 +24,6 @@ import java.io.InputStream
 import java.util.UUID
 import kotlin.system.exitProcess
 
-fun shell(
-    workingDir: File,
-    environment: Map<String, String> = mapOf(),
-    block: suspend Shell.() -> Unit
-): Int = runBlocking { Shell(workingDir, environment).apply { block() }.exit() }
-
 class Shell(workingDir: File, environment: Map<String, String>) {
     private val worker = Worker(workingDir, environment)
 
@@ -37,17 +31,36 @@ class Shell(workingDir: File, environment: Map<String, String>) {
 
     fun asUser(user: String, cmd: String): Call = SudoCall(worker, user, cmd)
 
-    operator fun String.invoke() = call(this)
+    suspend fun exit(): Int = worker.exit()
 
-    suspend fun exit() = worker.exit()
+    suspend operator fun String.invoke(): Unit = call(this).execute()
+
+    suspend inline operator fun String.invoke(
+        crossinline action: suspend (String) -> Unit
+    ): Unit = call(this).result(action)
+
+    suspend fun String.asUser(user: String): Unit = asUser(user, this).execute()
+
+    suspend inline fun String.asUser(
+        user: String,
+        crossinline action: suspend (String) -> Unit
+    ) = asUser(user, this).result(action)
 }
+
+fun shell(
+    workingDir: File,
+    environment: Map<String, String> = mapOf(),
+    block: suspend Shell.() -> Unit
+): Int = runBlocking { Shell(workingDir, environment).apply { block() }.exit() }
 
 interface Call {
     suspend fun execute()
     fun result(): Flow<String>
 }
 
-suspend fun Call.print() = result().collect { println(it) }
+suspend inline fun Call.result(crossinline action: suspend (String) -> Unit) = result().collect(action)
+
+suspend fun Call.printResult() = result { println(it) }
 
 private class RegularCall(private val worker: Worker, private val cmd: String) : Call {
     override suspend fun execute() = worker.run(cmd)
@@ -66,28 +79,19 @@ private class Worker(
 ) : CoroutineScope {
     override val coroutineContext = Dispatchers.Default + Job()
 
-    private val commandEndMarker = UUID.randomUUID().toString()
+    private val endMarker = UUID.randomUUID().toString()
 
     private val process = ProcessBuilder("/bin/sh").apply {
         directory(workingDir)
         environment().putAll(environment)
+        redirectErrorStream(true)
     }.start()
 
     private val main = broadcast {
-        val errorJob = launch {
-            process.errorStream
-                .asRawFlow { Raw.Error(it) }
-                .collect {
-                    send(it)
-                }
-        }
         val outputJob = launch {
-            process.inputStream
-                .asRawFlow { Raw.Line(it) }
-                .collect { send(it) }
+            process.inputStream.asRawFlow().collect { send(it) }
         }
         awaitClose {
-            errorJob.cancel()
             outputJob.cancel()
         }
     }
@@ -109,11 +113,7 @@ private class Worker(
         .mapNotNull {
             when (it) {
                 is Raw.Line -> it.data
-                is Raw.Error -> System.err.println(it.data).let { null }
-                is Raw.ExitCode -> when (val code = it.data ?: 1) {
-                    0 -> null
-                    else -> exitProcess(code)
-                }
+                is Raw.ExitCode -> processExitCode(it)
                 Raw.Terminate -> null
             }
         }
@@ -123,8 +123,7 @@ private class Worker(
         .takeWhile { it != Raw.Terminate }
         .collect { output ->
             when (output) {
-                is Raw.Error -> System.err.println(output.data)
-                is Raw.ExitCode -> (output.data ?: 1).takeIf { it != 0 }?.let { exitProcess(it) }
+                is Raw.ExitCode -> processExitCode(output)
             }
         }
 
@@ -139,20 +138,23 @@ private class Worker(
         }
     }
 
-    private inline fun InputStream.asRawFlow(crossinline block: (String) -> Raw) = bufferedReader()
+    private fun InputStream.asRawFlow() = bufferedReader()
         .lineSequence()
         .asFlow()
-        .transform { emitNextLine(it, block) }
+        .transform { transformLine(it) }
 
-    private suspend inline fun FlowCollector<Raw>.emitNextLine(
-        line: String,
-        block: (String) -> Raw
-    ) = when {
-        line.startsWith(commandEndMarker) -> {
-            emit(Raw.ExitCode(line.replaceBefore("|", "").substring(1).toIntOrNull()))
+    private suspend fun FlowCollector<Raw>.transformLine(line: String) = when {
+        line.contains(endMarker) -> with(line.split(endMarker, limit = 2)) {
+            if (size > 1) {
+                val lineContent = first()
+                if (lineContent.isNotEmpty()) {
+                    emit(Raw.Line(first()))
+                }
+            }
+            emit(Raw.ExitCode(last().toIntOrNull()))
             emit(Raw.Terminate)
         }
-        else -> emit(block(line))
+        else -> emit(Raw.Line(line))
     }
 
     private fun BufferedWriter.appendLine(line: String) = apply {
@@ -161,13 +163,15 @@ private class Worker(
     }
 
     private fun String.withEndMarker(): String {
-        return "$this && echo \"$commandEndMarker|$?\" || echo \"$commandEndMarker|$?\" 1>&2"
+        return "$this && echo \"$endMarker$?\" || echo \"$endMarker$?\" 1>&2"
     }
+
+    private fun processExitCode(exitCode: Raw.ExitCode) = (exitCode.data ?: 1)
+        .takeIf { it != 0 }
+        ?.let { exitProcess(it) }
 
     private sealed class Raw {
         data class Line(val data: String) : Raw()
-
-        data class Error(val data: String) : Raw()
 
         data class ExitCode(val data: Int?) : Raw()
 

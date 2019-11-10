@@ -28,4 +28,16 @@ class ShellTest {
         assertTrue(result.any { it == "README.md" })
     }.let(exitCodeCheck)
 
+    @Test
+    fun `sequential shell call`() = shell(dir) {
+        val result = call(
+            "mkdir sequentialTest",
+            "touch sequentialTest/sequentialTest1",
+            "touch sequentialTest/sequentialTest2",
+            "ls sequentialTest"
+        ).lines()
+        assertNotNull(result)
+        assertTrue(result.any { it == "sequentialTest1" })
+        assertTrue(result.any { it == "sequentialTest2" })
+    }.let(exitCodeCheck)
 }

@@ -31,10 +31,10 @@ suspend inline fun Call.lines(successErrorCode: Int = 0): List<String>? {
     }
 }
 
-suspend inline fun Flow<Raw>.collectWithExitCode(crossinline action: suspend (String) -> Unit): Int? {
+suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend (String) -> Unit): Int? {
     var exitCode: Int? = null
-    onEach { (it as? Raw.ExitCode)?.let { code -> exitCode = code.data } }
-        .mapNotNull { (it as? Raw.Line)?.data }
+    onEach { (it as? Output.ExitCode)?.let { code -> exitCode = code.data } }
+        .mapNotNull { (it as? Output.Line)?.data }
         .collect(action)
     return exitCode
 }

@@ -48,15 +48,15 @@ class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOn
     ) = asUser(user, this).result(action)
 }
 
-sealed class Raw {
-    data class Line(val data: String) : Raw()
-    data class ExitCode(val data: Int?) : Raw()
-    object Terminate : Raw()
+sealed class Output {
+    data class Line(val data: String) : Output()
+    data class ExitCode(val data: Int?) : Output()
+    object Terminate : Output()
 }
 
 interface Call {
     suspend fun execute(): Int?
-    fun result(): Flow<Raw>
+    fun result(): Flow<Output>
 }
 
 private class RegularCall(private val worker: Worker, private val cmd: String) : Call {
@@ -107,10 +107,10 @@ private class Worker(
 
     fun runWithResult(cmd: String) = processOutput.asFlow()
         .onStart { processInput.send(cmd.withEndMarker()) }
-        .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Raw.ExitCode)?.exitOnError() } }
-        .takeWhile { it != Raw.Terminate }
+        .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() } }
+        .takeWhile { it != Output.Terminate }
 
-    suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Raw.ExitCode>().single().data
+    suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Output.ExitCode>().single().data
 
     suspend fun exit() = processInput.send("exit").let { process.await() }
 
@@ -128,18 +128,18 @@ private class Worker(
         .asFlow()
         .transform { transformLine(it) }
 
-    private suspend fun FlowCollector<Raw>.transformLine(line: String) = when {
+    private suspend fun FlowCollector<Output>.transformLine(line: String) = when {
         line.contains(endMarker) -> with(line.split(endMarker, limit = 2)) {
             if (size > 1) {
                 val lineContent = first()
                 if (lineContent.isNotEmpty()) {
-                    emit(Raw.Line(first()))
+                    emit(Output.Line(first()))
                 }
             }
-            emit(Raw.ExitCode(last().toIntOrNull()))
-            emit(Raw.Terminate)
+            emit(Output.ExitCode(last().toIntOrNull()))
+            emit(Output.Terminate)
         }
-        else -> emit(Raw.Line(line))
+        else -> emit(Output.Line(line))
     }
 
     private fun BufferedWriter.appendLine(line: String) = apply {
@@ -151,5 +151,5 @@ private class Worker(
         return "$this && echo \"$endMarker$?\" || echo \"$endMarker$?\" 1>&2"
     }
 
-    private fun Raw.ExitCode.exitOnError() = (data ?: 1).takeIf { it != 0 }?.let { exitProcess(it) }
+    private fun Output.ExitCode.exitOnError() = (data ?: 1).takeIf { it != 0 }?.let { exitProcess(it) }
 }

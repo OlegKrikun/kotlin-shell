@@ -34,7 +34,13 @@ suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
 suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend (String) -> Unit): Int? {
     var exitCode: Int? = null
     onEach { (it as? Output.ExitCode)?.let { code -> exitCode = code.data } }
-        .mapNotNull { (it as? Output.Line)?.data }
+        .mapNotNull {
+            when (it) {
+                is Output.Line -> it.data
+                is Output.Error -> it.data
+                else -> null
+            }
+        }
         .collect(action)
     return exitCode
 }

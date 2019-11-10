@@ -50,6 +50,7 @@ class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOn
 
 sealed class Output {
     data class Line(val data: String) : Output()
+    data class Error(val data: String) : Output()
     data class ExitCode(val data: Int?) : Output()
     object Terminate : Output()
 }
@@ -82,15 +83,18 @@ private class Worker(
     private val process = ProcessBuilder("/bin/sh").apply {
         directory(workingDir)
         environment().putAll(environment)
-        redirectErrorStream(true)
     }.start()
 
     private val processOutput = broadcast {
-        val outputJob = launch {
-            process.inputStream.asRawFlow().collect { send(it) }
+        val stdJob = launch {
+            process.inputStream.asRawFlow { Output.Line(it) }.collect { send(it) }
+        }
+        val errJob = launch {
+            process.errorStream.asRawFlow { Output.Error(it) }.collect { send(it) }
         }
         awaitClose {
-            outputJob.cancel()
+            stdJob.cancel()
+            errJob.cancel()
         }
     }
 
@@ -123,23 +127,26 @@ private class Worker(
         }
     }
 
-    private fun InputStream.asRawFlow() = bufferedReader()
+    private inline fun InputStream.asRawFlow(crossinline generator: (String) -> Output) = bufferedReader()
         .lineSequence()
         .asFlow()
-        .transform { transformLine(it) }
+        .transform { transformLine(it, generator) }
 
-    private suspend fun FlowCollector<Output>.transformLine(line: String) = when {
+    private suspend inline fun FlowCollector<Output>.transformLine(
+        line: String,
+        generator: (String) -> Output
+    ) = when {
         line.contains(endMarker) -> with(line.split(endMarker, limit = 2)) {
             if (size > 1) {
                 val lineContent = first()
                 if (lineContent.isNotEmpty()) {
-                    emit(Output.Line(first()))
+                    emit(generator(first()))
                 }
             }
             emit(Output.ExitCode(last().toIntOrNull()))
             emit(Output.Terminate)
         }
-        else -> emit(Output.Line(line))
+        else -> emit(generator(line))
     }
 
     private fun BufferedWriter.appendLine(line: String) = apply {

@@ -19,7 +19,7 @@ dependencies {
 }
 
 group = "ru.krikun.kotlin"
-version = "0.0.0"
+version = "0.0.1"
 
 tasks.getByName<KotlinCompile>("compileKotlin") {
     kotlinOptions.freeCompilerArgs = listOf(

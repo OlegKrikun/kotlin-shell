@@ -11,12 +11,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.BufferedWriter
 import java.io.File
@@ -24,8 +25,8 @@ import java.io.InputStream
 import java.util.UUID
 import kotlin.system.exitProcess
 
-class Shell(workingDir: File, environment: Map<String, String>) {
-    private val worker = Worker(workingDir, environment)
+class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOnError: Boolean = true) {
+    private val worker = Worker(workingDir, environment, exitOnError)
 
     fun call(cmd: String): Call = RegularCall(worker, cmd)
 
@@ -33,13 +34,13 @@ class Shell(workingDir: File, environment: Map<String, String>) {
 
     suspend fun exit(): Int = worker.exit()
 
-    suspend operator fun String.invoke(): Unit = call(this).execute()
+    suspend operator fun String.invoke(): Int? = call(this).execute()
 
     suspend inline operator fun String.invoke(
         crossinline action: suspend (String) -> Unit
-    ): Unit = call(this).result(action)
+    ): Int? = call(this).result(action)
 
-    suspend fun String.asUser(user: String): Unit = asUser(user, this).execute()
+    suspend fun String.asUser(user: String): Int? = asUser(user, this).execute()
 
     suspend inline fun String.asUser(
         user: String,
@@ -47,20 +48,16 @@ class Shell(workingDir: File, environment: Map<String, String>) {
     ) = asUser(user, this).result(action)
 }
 
-fun shell(
-    workingDir: File,
-    environment: Map<String, String> = mapOf(),
-    block: suspend Shell.() -> Unit
-): Int = runBlocking { Shell(workingDir, environment).apply { block() }.exit() }
-
-interface Call {
-    suspend fun execute()
-    fun result(): Flow<String>
+sealed class Raw {
+    data class Line(val data: String) : Raw()
+    data class ExitCode(val data: Int?) : Raw()
+    object Terminate : Raw()
 }
 
-suspend inline fun Call.result(crossinline action: suspend (String) -> Unit) = result().collect(action)
-
-suspend fun Call.printResult() = result { println(it) }
+interface Call {
+    suspend fun execute(): Int?
+    fun result(): Flow<Raw>
+}
 
 private class RegularCall(private val worker: Worker, private val cmd: String) : Call {
     override suspend fun execute() = worker.run(cmd)
@@ -75,7 +72,8 @@ private class SudoCall(private val worker: Worker, private val user: String, pri
 
 private class Worker(
     workingDir: File,
-    environment: Map<String, String>
+    environment: Map<String, String>,
+    private val exitOnError: Boolean
 ) : CoroutineScope {
     override val coroutineContext = Dispatchers.Default + Job()
 
@@ -87,7 +85,7 @@ private class Worker(
         redirectErrorStream(true)
     }.start()
 
-    private val main = broadcast {
+    private val processOutput = broadcast {
         val outputJob = launch {
             process.inputStream.asRawFlow().collect { send(it) }
         }
@@ -107,25 +105,12 @@ private class Worker(
         }
     }
 
-    fun runWithResult(cmd: String) = main.asFlow()
+    fun runWithResult(cmd: String) = processOutput.asFlow()
         .onStart { processInput.send(cmd.withEndMarker()) }
+        .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Raw.ExitCode)?.exitOnError() } }
         .takeWhile { it != Raw.Terminate }
-        .mapNotNull {
-            when (it) {
-                is Raw.Line -> it.data
-                is Raw.ExitCode -> processExitCode(it)
-                Raw.Terminate -> null
-            }
-        }
 
-    suspend fun run(cmd: String) = main.asFlow()
-        .onStart { processInput.send(cmd.withEndMarker()) }
-        .takeWhile { it != Raw.Terminate }
-        .collect { output ->
-            when (output) {
-                is Raw.ExitCode -> processExitCode(output)
-            }
-        }
+    suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Raw.ExitCode>().single().data
 
     suspend fun exit() = processInput.send("exit").let { process.await() }
 
@@ -166,15 +151,5 @@ private class Worker(
         return "$this && echo \"$endMarker$?\" || echo \"$endMarker$?\" 1>&2"
     }
 
-    private fun processExitCode(exitCode: Raw.ExitCode) = (exitCode.data ?: 1)
-        .takeIf { it != 0 }
-        ?.let { exitProcess(it) }
-
-    private sealed class Raw {
-        data class Line(val data: String) : Raw()
-
-        data class ExitCode(val data: Int?) : Raw()
-
-        object Terminate : Raw()
-    }
+    private fun Raw.ExitCode.exitOnError() = (data ?: 1).takeIf { it != 0 }?.let { exitProcess(it) }
 }

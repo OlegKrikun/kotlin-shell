@@ -52,7 +52,6 @@ sealed class Output {
     data class Line(val data: String) : Output()
     data class Error(val data: String) : Output()
     data class ExitCode(val data: Int?) : Output()
-    object Terminate : Output()
 }
 
 interface Call {
@@ -112,7 +111,8 @@ private class Worker(
     fun runWithResult(cmd: String) = processOutput.asFlow()
         .onStart { processInput.send(cmd.withEndMarker()) }
         .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() } }
-        .takeWhile { it != Output.Terminate }
+        .takeWhile { it != null }
+        .transform { it?.let { emit(it) } }
 
     suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Output.ExitCode>().single().data
 
@@ -132,7 +132,7 @@ private class Worker(
         .asFlow()
         .transform { transformLine(it, generator) }
 
-    private suspend inline fun FlowCollector<Output>.transformLine(
+    private suspend inline fun FlowCollector<Output?>.transformLine(
         line: String,
         generator: (String) -> Output
     ) = when {
@@ -144,7 +144,7 @@ private class Worker(
                 }
             }
             emit(Output.ExitCode(last().toIntOrNull()))
-            emit(Output.Terminate)
+            emit(null)
         }
         else -> emit(generator(line))
     }

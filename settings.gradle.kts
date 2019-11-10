@@ -1,1 +1,1 @@
-rootProject.name = "shell"
+rootProject.name = "kotlin-shell"

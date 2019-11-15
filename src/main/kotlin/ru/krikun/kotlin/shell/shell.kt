@@ -17,13 +17,15 @@ import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.BufferedWriter
+import java.io.Closeable
 import java.io.File
 import java.util.UUID
 import kotlin.system.exitProcess
 
-class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOnError: Boolean = true) {
+class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOnError: Boolean = true) : Closeable {
     private val worker = Worker(workingDir, environment, exitOnError)
 
     fun call(cmd: String): Call = RegularCall(worker, cmd)
@@ -35,6 +37,10 @@ class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOn
     fun asUser(user: String, vararg cmd: String): Call = SudoCall(worker, user, cmd.joinCommandSequential())
 
     suspend fun exit(): Int = worker.exit()
+
+    override fun close() {
+        worker.close()
+    }
 
     suspend operator fun String.invoke(): Int? = call(this).execute()
 
@@ -134,6 +140,10 @@ private class Worker(
         .transform { emit(it!!) }
 
     suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Output.ExitCode>().single().data
+
+    fun close() {
+        runBlocking(coroutineContext) { exit() }
+    }
 
     suspend fun exit() = processInput.send("exit").let { process.await() }
 

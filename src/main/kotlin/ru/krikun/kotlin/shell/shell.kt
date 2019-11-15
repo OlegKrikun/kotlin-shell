@@ -25,8 +25,13 @@ import java.io.File
 import java.util.UUID
 import kotlin.system.exitProcess
 
-class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOnError: Boolean = true) : Closeable {
-    private val worker = Worker(workingDir, environment, exitOnError)
+class Shell(
+    workingDir: File,
+    environment: Map<String, String> = mapOf(),
+    executable: String = SH,
+    exitOnError: Boolean = true
+) : Closeable {
+    private val worker = Worker(workingDir, environment, executable, exitOnError)
 
     fun call(cmd: String): Call = RegularCall(worker, cmd)
 
@@ -70,6 +75,10 @@ class Shell(workingDir: File, environment: Map<String, String> = mapOf(), exitOn
 
     fun Iterable<String>.joinCommandSequential() = joinToString(" && ")
     private fun Array<out String>.joinCommandSequential() = joinToString(" && ")
+
+    companion object {
+        const val SH = "/usr/bin/env sh"
+    }
 }
 
 sealed class Output {
@@ -97,13 +106,14 @@ private class SudoCall(private val worker: Worker, private val user: String, pri
 private class Worker(
     workingDir: File,
     environment: Map<String, String>,
+    executable: String,
     private val exitOnError: Boolean
 ) : CoroutineScope {
     override val coroutineContext = Dispatchers.Default + Job()
 
     private val endMarker = UUID.randomUUID().toString()
 
-    private val process = ProcessBuilder("/bin/sh").apply {
+    private val process = ProcessBuilder(executable.split(" ")).apply {
         directory(workingDir)
         environment().putAll(environment)
     }.start()

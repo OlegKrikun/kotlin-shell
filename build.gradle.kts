@@ -16,6 +16,7 @@ dependencies {
 
     testImplementation("junit:junit:4.12")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.3.50")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.3.2")
 }
 
 group = "ru.krikun.kotlin"

@@ -26,7 +26,7 @@ import java.util.UUID
 import kotlin.system.exitProcess
 
 class Shell(
-    workingDir: File,
+    workingDir: File = currentSystemWorkingDir(),
     environment: Map<String, String> = mapOf(),
     executable: String = SH,
     exitOnError: Boolean = true

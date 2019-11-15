@@ -8,7 +8,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 
 fun shell(
-    workingDir: File,
+    workingDir: File = currentSystemWorkingDir(),
     environment: Map<String, String> = mapOf(),
     executable: String = Shell.SH,
     exitOnError: Boolean = true,
@@ -46,3 +46,4 @@ suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend 
     return exitCode
 }
 
+fun currentSystemWorkingDir(): File = File(System.getProperty("user.dir"))

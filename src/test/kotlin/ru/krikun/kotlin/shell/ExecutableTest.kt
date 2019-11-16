@@ -24,4 +24,7 @@ class ExecutableTest {
 
     @Test
     fun `executable usr-bin-env sh`() = shell(dir, executable = "/usr/bin/env sh", block = testBody).let(exitCodeCheck)
+
+    @Test
+    fun `executable usr-bin-env posh`() = shell(dir, executable = "/usr/bin/env posh", block = testBody).let(exitCodeCheck)
 }

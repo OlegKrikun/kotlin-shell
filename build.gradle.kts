@@ -24,7 +24,6 @@ version = "0.0.2"
 
 tasks.withType(KotlinCompile::class) {
     kotlinOptions.freeCompilerArgs = listOf(
-        "-XXLanguage:+NewInference",
         "-Xuse-experimental=kotlinx.coroutines.ExperimentalCoroutinesApi",
         "-Xuse-experimental=kotlinx.coroutines.ObsoleteCoroutinesApi",
         "-Xuse-experimental=kotlinx.coroutines.FlowPreview"

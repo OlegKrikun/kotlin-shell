@@ -144,7 +144,7 @@ private class Worker(
 
     private val process = WorkerProcess(workingDir, environment, executable)
 
-    fun run(cmd: String): Flow<Output> = flow {
+    fun run(cmd: String): Flow<Output> = flow<Output> {
         semaphore.acquire()
         process.output.openSubscription().apply {
             process.input.send(cmd)

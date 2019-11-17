@@ -7,7 +7,7 @@ repository {
 }
 
 dependency {
-    implementation("ru.krikun.kotlin:kotlin-shell:0.0.2")
+    implementation("ru.krikun.kotlin:kotlin-shell:0.0.3")
 }
 ```
 

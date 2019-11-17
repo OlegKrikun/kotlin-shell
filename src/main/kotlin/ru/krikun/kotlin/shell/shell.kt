@@ -3,22 +3,21 @@ package ru.krikun.kotlin.shell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.broadcast
+import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.single
-import kotlinx.coroutines.flow.takeWhile
-import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
 import java.io.BufferedWriter
 import java.io.Closeable
 import java.io.File
@@ -111,6 +110,8 @@ private class Worker(
 ) : CoroutineScope {
     override val coroutineContext = Dispatchers.Default + Job()
 
+    private val semaphore = Semaphore(1)
+
     private val endMarker = UUID.randomUUID().toString()
 
     private val process = ProcessBuilder(executable.split(" ")).apply {
@@ -142,12 +143,21 @@ private class Worker(
         }
     }
 
-    fun runWithResult(cmd: String) = processOutput.openSubscription()
-        .consumeAsFlow()
-        .onStart { processInput.send(cmd.withEndMarker()) }
-        .onEach { raw -> raw.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() } }
-        .takeWhile { it != null }
-        .transform { emit(it!!) }
+    fun runWithResult(cmd: String): Flow<Output> = flow {
+        semaphore.acquire()
+        processOutput.openSubscription().apply {
+            processInput.send(cmd.withEndMarker())
+            consume {
+                var output = receive()
+                while (output != null) {
+                    output.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() }
+                    emit(output)
+                    output = receive()
+                }
+            }
+        }
+        semaphore.release()
+    }
 
     suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Output.ExitCode>().single().data
 
@@ -155,7 +165,13 @@ private class Worker(
         runBlocking(coroutineContext) { exit() }
     }
 
-    suspend fun exit() = processInput.send("exit").let { process.await() }
+    suspend fun exit(): Int {
+        semaphore.acquire()
+        processInput.send("exit")
+        val exitCode = process.await()
+        semaphore.release()
+        return exitCode
+    }
 
     private suspend fun Process.await() = suspendCancellableCoroutine<Int> {
         it.invokeOnCancellation { destroy() }

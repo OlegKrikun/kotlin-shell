@@ -1,7 +1,6 @@
 package ru.krikun.kotlin.shell
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BroadcastChannel
@@ -15,6 +14,7 @@ import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.sync.Semaphore
 import java.io.BufferedWriter
 import java.io.Closeable
@@ -138,7 +138,7 @@ private class WorkerProcess(
     executable: String
 ) {
     private val scope = object : CoroutineScope {
-        override val coroutineContext = Dispatchers.Default + Job()
+        override val coroutineContext = newFixedThreadPoolContext(3, "WorkerProcess") + Job()
     }
 
     private val process = ProcessBuilder(executable.split(" ")).apply {

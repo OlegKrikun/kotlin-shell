@@ -32,8 +32,8 @@ import kotlin.system.exitProcess
 internal class Worker(
     workingDir: File,
     environment: Map<String, String>,
-    val executable: String,
-    val exitOnError: Boolean
+    private val executable: String,
+    private val exitOnError: Boolean
 ) {
     private val semaphore = Semaphore(1)
 
@@ -53,6 +53,26 @@ internal class Worker(
             }
         }
         semaphore.release()
+    }
+
+    fun run(list: List<String>): Flow<Flow<Output>> = flow {
+        val workingDir = run("pwd").filterIsInstance<Output.Line>().single().data.let { File(it) }
+        val environment = run("env").filterIsInstance<Output.Line>().toList().associate {
+            it.data.split("=", limit = 2).let { (key, value) -> key to value }
+        }
+
+        val queue = ConcurrentLinkedQueue<Worker>()
+        val count = AtomicInteger(list.size)
+        for (cmd in list) {
+            val currentWorker = queue.poll() ?: Worker(workingDir, environment, executable, exitOnError)
+            val flow = currentWorker.run(cmd).onCompletion {
+                queue.offer(currentWorker)
+                if (count.decrementAndGet() == 0) {
+                    queue.forEach { it.exit() }
+                }
+            }
+            emit(flow)
+        }
     }
 
     fun exit() = process.exit()
@@ -119,25 +139,5 @@ internal class Worker(
             newLine()
             flush()
         }
-    }
-}
-
-internal suspend inline fun Worker.run(list: List<String>): Flow<Flow<Output>> = flow {
-    val workingDir = run("pwd").filterIsInstance<Output.Line>().single().data.let { File(it) }
-    val environment = run("env").filterIsInstance<Output.Line>().toList().associate {
-        it.data.split("=", limit = 2).let { (key, value) -> key to value }
-    }
-
-    val queue = ConcurrentLinkedQueue<Worker>()
-    val count = AtomicInteger(list.size)
-    for (cmd in list) {
-        val currentWorker = queue.poll() ?: Worker(workingDir, environment, executable, exitOnError)
-        val flow = currentWorker.run(cmd).onCompletion {
-            queue.offer(currentWorker)
-            if (count.decrementAndGet() == 0) {
-                queue.forEach { it.exit() }
-            }
-        }
-        emit(flow)
     }
 }

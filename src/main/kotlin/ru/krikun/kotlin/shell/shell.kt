@@ -12,7 +12,11 @@ import kotlinx.coroutines.channels.broadcast
 import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.sync.Semaphore
@@ -21,6 +25,8 @@ import java.io.Closeable
 import java.io.File
 import java.io.InputStream
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.exitProcess
 
 class Shell(
@@ -31,13 +37,17 @@ class Shell(
 ) : Closeable {
     private val worker = Worker(workingDir, environment, executable, exitOnError)
 
-    fun call(cmd: String): Call = RegularCall(worker, cmd)
+    fun call(cmd: String): Call = CallImpl(worker, cmd)
 
-    fun call(vararg cmd: String): Call = RegularCall(worker, cmd.joinCommandSequential())
+    fun call(vararg cmd: String): Call = CallImpl(worker, cmd.joinCommandSequential())
 
-    fun asUser(user: String, cmd: String): Call = SudoCall(worker, user, cmd)
+    fun asUser(user: String, cmd: String): Call = SudoCallImpl(worker, user, cmd)
 
-    fun asUser(user: String, vararg cmd: String): Call = SudoCall(worker, user, cmd.joinCommandSequential())
+    fun asUser(user: String, vararg cmd: String): Call = SudoCallImpl(worker, user, cmd.joinCommandSequential())
+
+    fun parallel(cmd: List<String>): ParallelCall = ParallelCallImpl(worker, cmd)
+
+    fun parallelAsUser(user: String, cmd: List<String>): ParallelCall = SudoParallelCallImpl(worker, user, cmd)
 
     fun exit(): Int = worker.exit()
 
@@ -90,22 +100,44 @@ interface Call {
     fun output(): Flow<Output>
 }
 
-private class RegularCall(private val worker: Worker, private val cmd: String) : Call {
-    override suspend fun execute() = worker.run(cmd).exitCode()
+interface ParallelCall {
+    suspend fun execute(concurrency: Int): List<Int?>
+    suspend fun output(): Flow<Flow<Output>>
+}
+
+private class CallImpl(private val worker: Worker, private val cmd: String) : Call {
+    override suspend fun execute() = output().exitCode()
     override fun output() = worker.run(cmd)
 }
 
-private class SudoCall(private val worker: Worker, private val user: String, private val cmd: String) : Call {
-    override suspend fun execute() = worker.run(cmd.asUser(user)).exitCode()
+private class SudoCallImpl(
+    private val worker: Worker,
+    private val user: String,
+    private val cmd: String
+) : Call {
+    override suspend fun execute() = output().exitCode()
     override fun output() = worker.run(cmd.asUser(user))
-    private fun String.asUser(user: String) = "sudo -u $user $this"
+}
+
+private class ParallelCallImpl(private val worker: Worker, private val cmd: List<String>) : ParallelCall {
+    override suspend fun execute(concurrency: Int) = output().exitCodeList(concurrency)
+    override suspend fun output() = worker.run(cmd)
+}
+
+private class SudoParallelCallImpl(
+    private val worker: Worker,
+    private val user: String,
+    private val cmd: List<String>
+) : ParallelCall {
+    override suspend fun execute(concurrency: Int) = output().exitCodeList(concurrency)
+    override suspend fun output() = worker.run(cmd.map { it.asUser(user) })
 }
 
 private class Worker(
     workingDir: File,
     environment: Map<String, String>,
-    executable: String,
-    private val exitOnError: Boolean
+    val executable: String,
+    val exitOnError: Boolean
 ) {
     private val semaphore = Semaphore(1)
 
@@ -191,5 +223,27 @@ private class WorkerProcess(
         write(line)
         newLine()
         flush()
+    }
+}
+
+private fun String.asUser(user: String) = "sudo -u $user $this"
+
+private suspend inline fun Worker.run(cmds: List<String>): Flow<Flow<Output>> = flow {
+    val workingDir = run("pwd").filterIsInstance<Output.Line>().single().data.let { File(it) }
+    val environment = run("env").filterIsInstance<Output.Line>().toList().associate {
+        it.data.split("=", limit = 2).let { (key, value) -> key to value }
+    }
+
+    val queue = ConcurrentLinkedQueue<Worker>()
+    val count = AtomicInteger(cmds.size)
+    for (cmd in cmds) {
+        val currentWorker = queue.poll() ?: Worker(workingDir, environment, executable, exitOnError)
+        val flow = currentWorker.run(cmd).onCompletion {
+            queue.offer(currentWorker)
+            if (count.decrementAndGet() == 0) {
+                queue.forEach { it.exit() }
+            }
+        }
+        emit(flow)
     }
 }

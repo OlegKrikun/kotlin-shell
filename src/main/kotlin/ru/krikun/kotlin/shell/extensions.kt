@@ -3,9 +3,12 @@ package ru.krikun.kotlin.shell
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.flattenMerge
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
@@ -35,6 +38,11 @@ suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
 }
 
 suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
+
+suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int) = flattenMerge(concurrency)
+    .filterIsInstance<Output.ExitCode>()
+    .map { it.data }
+    .toList()
 
 suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend (String) -> Unit): Int? {
     var exitCode: Int? = null

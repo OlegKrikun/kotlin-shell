@@ -2,8 +2,10 @@ package ru.krikun.kotlin.shell
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
@@ -31,6 +33,8 @@ suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
         else -> null
     }
 }
+
+suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
 
 suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend (String) -> Unit): Int? {
     var exitCode: Int? = null

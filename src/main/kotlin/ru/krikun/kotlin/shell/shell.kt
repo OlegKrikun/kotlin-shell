@@ -4,23 +4,22 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.broadcast
 import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import java.io.BufferedWriter
 import java.io.Closeable
 import java.io.File
+import java.io.InputStream
 import java.util.UUID
 import kotlin.system.exitProcess
 
@@ -40,10 +39,10 @@ class Shell(
 
     fun asUser(user: String, vararg cmd: String): Call = SudoCall(worker, user, cmd.joinCommandSequential())
 
-    suspend fun exit(): Int = worker.exit()
+    fun exit(): Int = worker.exit()
 
     override fun close() {
-        worker.close()
+        exit()
     }
 
     suspend operator fun String.invoke(): Int? = call(this).execute()
@@ -92,13 +91,13 @@ interface Call {
 }
 
 private class RegularCall(private val worker: Worker, private val cmd: String) : Call {
-    override suspend fun execute() = worker.run(cmd)
-    override fun output() = worker.runWithResult(cmd)
+    override suspend fun execute() = worker.run(cmd).exitCode()
+    override fun output() = worker.run(cmd)
 }
 
 private class SudoCall(private val worker: Worker, private val user: String, private val cmd: String) : Call {
-    override suspend fun execute() = worker.run(cmd.asUser(user))
-    override fun output() = worker.runWithResult(cmd.asUser(user))
+    override suspend fun execute() = worker.run(cmd.asUser(user)).exitCode()
+    override fun output() = worker.run(cmd.asUser(user))
     private fun String.asUser(user: String) = "sudo -u $user $this"
 }
 
@@ -107,46 +106,15 @@ private class Worker(
     environment: Map<String, String>,
     executable: String,
     private val exitOnError: Boolean
-) : CoroutineScope {
-    override val coroutineContext = Dispatchers.Default + Job()
-
+) {
     private val semaphore = Semaphore(1)
 
-    private val endMarker = UUID.randomUUID().toString()
+    private val process = WorkerProcess(workingDir, environment, executable)
 
-    private val process = ProcessBuilder(executable.split(" ")).apply {
-        directory(workingDir)
-        environment().putAll(environment)
-    }.start()
-
-    private val processOutput = broadcast {
-        val stdJob = launch {
-            process.inputStream.bufferedReader().lineSequence().forEach { line -> output(line) { Output.Line(it) } }
-        }
-        val errJob = launch {
-            process.errorStream.bufferedReader().lineSequence().forEach { line -> output(line) { Output.Error(it) } }
-        }
-        awaitClose {
-            stdJob.cancel()
-            errJob.cancel()
-        }
-    }
-
-    private val processInput = Channel<String>().also { channel ->
-        launch {
-            process.outputStream.bufferedWriter().use { writer ->
-                channel.consumeEach {
-                    writer.appendLine(it).flush()
-                }
-            }
-            channel.close()
-        }
-    }
-
-    fun runWithResult(cmd: String): Flow<Output> = flow {
+    fun run(cmd: String): Flow<Output> = flow {
         semaphore.acquire()
-        processOutput.openSubscription().apply {
-            processInput.send(cmd.withEndMarker())
+        process.output.openSubscription().apply {
+            process.input.send(cmd)
             consume {
                 var output = receive()
                 while (output != null) {
@@ -159,47 +127,69 @@ private class Worker(
         semaphore.release()
     }
 
-    suspend fun run(cmd: String) = runWithResult(cmd).filterIsInstance<Output.ExitCode>().single().data
-
-    fun close() {
-        runBlocking(coroutineContext) { exit() }
-    }
-
-    suspend fun exit(): Int {
-        semaphore.acquire()
-        processInput.send("exit")
-        val exitCode = process.await()
-        semaphore.release()
-        return exitCode
-    }
-
-    private suspend fun Process.await() = suspendCancellableCoroutine<Int> {
-        it.invokeOnCancellation { destroy() }
-        try {
-            it.resumeWith(Result.success(waitFor()))
-        } catch (e: Exception) {
-            it.resumeWith(Result.failure(e))
-        }
-    }
-
-    private suspend inline fun ProducerScope<Output?>.output(line: String, factory: (String) -> Output) = when {
-        line.contains(endMarker) -> {
-            val list = line.split(endMarker, limit = 2)
-            list.takeIf { it.size > 1 }?.first()?.takeIf { it.isNotEmpty() }?.let { send(factory(it)) }
-            send(Output.ExitCode(list.last().toIntOrNull()))
-            send(null)
-        }
-        else -> send(factory(line))
-    }
-
-    private fun BufferedWriter.appendLine(line: String) = apply {
-        write(line)
-        newLine()
-    }
-
-    private fun String.withEndMarker(): String {
-        return "$this && echo \"$endMarker$?\" || echo \"$endMarker$?\" 1>&2"
-    }
+    fun exit() = process.exit()
 
     private fun Output.ExitCode.exitOnError() = (data ?: 1).takeIf { it != 0 }?.let { exitProcess(it) }
+}
+
+private class WorkerProcess(
+    workingDir: File,
+    environment: Map<String, String>,
+    executable: String
+) {
+    private val scope = object : CoroutineScope {
+        override val coroutineContext = Dispatchers.Default + Job()
+    }
+
+    private val process = ProcessBuilder(executable.split(" ")).apply {
+        directory(workingDir)
+        environment().putAll(environment)
+    }.start()
+
+    private val marker = UUID.randomUUID().toString()
+
+    val output: BroadcastChannel<Output?> = scope.broadcast {
+        val stdJob = launch { output(process.inputStream) { Output.Line(it) } }
+        val errJob = launch { output(process.errorStream) { Output.Error(it) } }
+        awaitClose {
+            stdJob.cancel()
+            errJob.cancel()
+        }
+    }
+
+    val input: SendChannel<String> = Channel<String>().also { channel ->
+        scope.launch {
+            process.outputStream.bufferedWriter().use { writer ->
+                channel.consumeEach { writer.line("$it && echo $marker$? || echo $marker$? 1>&2") }
+                writer.line("exit")
+            }
+        }
+    }
+
+    fun exit(): Int {
+        input.close()
+        scope.cancel()
+        return process.waitFor()
+    }
+
+    private suspend fun ProducerScope<Output?>.output(
+        stream: InputStream,
+        factory: (String) -> Output
+    ) = stream.bufferedReader().lineSequence().forEach { line ->
+        when {
+            line.contains(marker) -> {
+                val list = line.split(marker, limit = 2)
+                list.takeIf { it.size > 1 }?.first()?.takeIf { it.isNotEmpty() }?.let { send(factory(it)) }
+                send(Output.ExitCode(list.last().toIntOrNull()))
+                send(null)
+            }
+            else -> send(factory(line))
+        }
+    }
+
+    private fun BufferedWriter.line(line: String) {
+        write(line)
+        newLine()
+        flush()
+    }
 }

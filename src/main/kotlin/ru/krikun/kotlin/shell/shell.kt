@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.broadcast
 import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.channels.consumeEach
+import kotlinx.coroutines.flow.DEFAULT_CONCURRENCY
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
@@ -101,7 +102,7 @@ interface Call {
 }
 
 interface ParallelCall {
-    suspend fun execute(concurrency: Int): List<Int?>
+    suspend fun execute(concurrency: Int = DEFAULT_CONCURRENCY): List<Int?>
     suspend fun output(): Flow<Flow<Output>>
 }
 

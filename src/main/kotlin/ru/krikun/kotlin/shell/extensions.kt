@@ -1,5 +1,6 @@
 package ru.krikun.kotlin.shell
 
+import kotlinx.coroutines.flow.DEFAULT_CONCURRENCY
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
@@ -39,7 +40,7 @@ suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
 
 suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
 
-suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int) = flattenMerge(concurrency)
+suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int = DEFAULT_CONCURRENCY) = flattenMerge(concurrency)
     .filterIsInstance<Output.ExitCode>()
     .map { it.data }
     .toList()

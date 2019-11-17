@@ -83,13 +83,13 @@ class ShellTest {
         val write = range.map { "echo \$PTEST > parallelTest$it" }
         val read = range.map { "cat parallelTest$it" }
         parallel(write).execute(4).forEach(exitCodeCheck)
-        parallel(read).output().flatMapMerge(4) {
-            it.filterIsInstance<Output.Line>()
-        }.collect { assertEquals("parallelTest", it.data) }
+        parallel(read).output()
+            .flatMapMerge(4) { it.filterIsInstance<Output.Line>() }
+            .collect { assertEquals("parallelTest", it.data) }
     }.let(exitCodeCheck)
 
     @Test
-    fun `parallel2 shell call`() = shell(dir) {
+    fun `parallel flowOn shell call`() = shell(dir) {
         "mkdir parallelTest2"().let(exitCodeCheck)
         "cd parallelTest2"().let(exitCodeCheck)
         "export PTEST=parallelTest"().let(exitCodeCheck)
@@ -108,6 +108,20 @@ class ShellTest {
             .flowOn(Dispatchers.IO)
             .flatMapMerge(4) { it.filterIsInstance<Output.Line>() }
             .flowOn(Dispatchers.IO)
+            .collect { assertEquals("parallelTest", it.data) }
+    }.let(exitCodeCheck)
+
+    @Test
+    fun `parallel DEFAULT_CONCURRENCY shell call`() = shell(dir) {
+        "mkdir parallelTest3"().let(exitCodeCheck)
+        "cd parallelTest3"().let(exitCodeCheck)
+        "export PTEST=parallelTest"().let(exitCodeCheck)
+        val range = 1..10000
+        val write = range.map { "echo \$PTEST > parallelTest$it" }
+        val read = range.map { "cat parallelTest$it" }
+        parallel(write).execute().forEach(exitCodeCheck)
+        parallel(read).output()
+            .flatMapMerge { it.filterIsInstance<Output.Line>() }
             .collect { assertEquals("parallelTest", it.data) }
     }.let(exitCodeCheck)
 

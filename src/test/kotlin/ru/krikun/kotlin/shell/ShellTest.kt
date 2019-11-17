@@ -83,9 +83,7 @@ class ShellTest {
         val write = range.map { "echo \$PTEST > parallelTest$it" }
         val read = range.map { "cat parallelTest$it" }
         parallel(write).execute(4).forEach(exitCodeCheck)
-        parallel(read).output()
-            .flatMapMerge(4) { it.filterIsInstance<Output.Line>() }
-            .collect { assertEquals("parallelTest", it.data) }
+        parallel(read).output(4) { assertEquals("parallelTest", it) }.forEach(exitCodeCheck)
     }.let(exitCodeCheck)
 
     @Test
@@ -120,9 +118,7 @@ class ShellTest {
         val write = range.map { "echo \$PTEST > parallelTest$it" }
         val read = range.map { "cat parallelTest$it" }
         parallel(write).execute().forEach(exitCodeCheck)
-        parallel(read).output()
-            .flatMapMerge { it.filterIsInstance<Output.Line>() }
-            .collect { assertEquals("parallelTest", it.data) }
+        parallel(read).output { assertEquals("parallelTest", it) }.forEach(exitCodeCheck)
     }.let(exitCodeCheck)
 
     @Test

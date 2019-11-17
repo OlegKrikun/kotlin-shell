@@ -38,6 +38,27 @@ suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
     }
 }
 
+suspend inline fun ParallelCall.output(
+    concurrency: Int = DEFAULT_CONCURRENCY,
+    crossinline action: suspend (String) -> Unit
+): List<Int?> {
+    return output().collectWithExitCodeList(concurrency, action)
+}
+
+suspend fun ParallelCall.printOutput() = output { println(it) }
+
+/**
+ * Return list of string or null if any of exit codes is not success.
+ */
+suspend inline fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
+    val list = mutableListOf<String>()
+    val codes = output().collectWithExitCodeList { list.add(it) }
+    return when {
+        codes.all { it == successExitCode } -> list
+        else -> null
+    }
+}
+
 suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
 
 suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int = DEFAULT_CONCURRENCY) = flattenMerge(concurrency)
@@ -57,6 +78,24 @@ suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend 
         }
         .collect(action)
     return exitCode
+}
+
+suspend inline fun Flow<Flow<Output>>.collectWithExitCodeList(
+    concurrency: Int = DEFAULT_CONCURRENCY,
+    crossinline action: suspend (String) -> Unit
+): List<Int?> {
+    val exitCodeList = mutableListOf<Int?>()
+    flattenMerge(concurrency)
+        .onEach { (it as? Output.ExitCode)?.let { code -> exitCodeList.add(code.data) } }
+        .mapNotNull {
+            when (it) {
+                is Output.Line -> it.data
+                is Output.Error -> it.data
+                else -> null
+            }
+        }
+        .collect(action)
+    return exitCodeList
 }
 
 fun currentSystemWorkingDir(): File = File(System.getProperty("user.dir"))

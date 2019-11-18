@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.util.Properties
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.3.50"
+    id("org.jetbrains.kotlin.jvm") version "1.3.60"
     id("com.jfrog.bintray") version "1.8.4"
     id("org.gradle.maven-publish")
 }
@@ -11,11 +11,11 @@ plugins {
 repositories { jcenter() }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.3.50")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.3.60")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.2")
 
     testImplementation("junit:junit:4.12")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.3.50")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.3.60")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.3.2")
 }
 

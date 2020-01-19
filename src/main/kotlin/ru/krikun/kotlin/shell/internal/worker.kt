@@ -107,7 +107,7 @@ internal class Worker(
         val input: SendChannel<String> = Channel<String>().also { channel ->
             scope.launch {
                 process.outputStream.bufferedWriter().use { writer ->
-                    channel.consumeEach { writer.line("$it && echo $marker$? || echo $marker$? 1>&2") }
+                    channel.consumeEach { writer.line(it.withMarker(marker)) }
                     writer.line("exit")
                 }
             }
@@ -126,8 +126,8 @@ internal class Worker(
             when {
                 line.contains(marker) -> {
                     val list = line.split(marker, limit = 2)
-                    list.takeIf { it.size > 1 }?.first()?.takeIf { it.isNotEmpty() }?.let { send(factory(it)) }
-                    send(Output.ExitCode(list.last().toIntOrNull()))
+                    list.findLastOutputLine()?.let { send(factory(it)) }
+                    send(Output.ExitCode(list.findExitCode()))
                     send(null)
                 }
                 else -> send(factory(line))
@@ -139,5 +139,11 @@ internal class Worker(
             newLine()
             flush()
         }
+
+        private fun String.withMarker(marker: String) = "$this && echo $marker$? || echo $marker$? 1>&2"
+
+        private fun List<String>.findLastOutputLine() = takeIf { it.size > 1 }?.first()?.takeIf { it.isNotEmpty() }
+
+        private fun List<String>.findExitCode() = last().toIntOrNull()
     }
 }

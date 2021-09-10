@@ -1,5 +1,6 @@
 package ru.krikun.kotlin.shell
 
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.DEFAULT_CONCURRENCY
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -38,6 +39,7 @@ suspend fun Call.lines(successExitCode: Int = 0): List<String>? {
     }
 }
 
+@OptIn(FlowPreview::class)
 suspend inline fun ParallelCall.output(
     concurrency: Int = DEFAULT_CONCURRENCY,
     crossinline action: suspend (String) -> Unit
@@ -61,6 +63,7 @@ suspend inline fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
 
 suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
 
+@OptIn(FlowPreview::class)
 suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int = DEFAULT_CONCURRENCY) = flattenMerge(concurrency)
     .filterIsInstance<Output.ExitCode>()
     .map { it.data }
@@ -80,6 +83,7 @@ suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend 
     return exitCode
 }
 
+@OptIn(FlowPreview::class)
 suspend inline fun Flow<Flow<Output>>.collectWithExitCodeList(
     concurrency: Int = DEFAULT_CONCURRENCY,
     crossinline action: suspend (String) -> Unit

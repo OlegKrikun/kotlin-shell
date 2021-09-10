@@ -20,11 +20,9 @@ group = "ru.krikun.kotlin"
 version = "0.0.3"
 
 tasks.withType(KotlinCompile::class) {
-    kotlinOptions.freeCompilerArgs = listOf(
-        "-Xuse-experimental=kotlinx.coroutines.ExperimentalCoroutinesApi",
-        "-Xuse-experimental=kotlinx.coroutines.ObsoleteCoroutinesApi",
-        "-Xuse-experimental=kotlinx.coroutines.FlowPreview"
-    )
+    kotlinOptions{
+        freeCompilerArgs = listOf("-Xopt-in=kotlin.RequiresOptIn")
+    }
 }
 
 val sourcesJar = task<Jar>("sourcesJar") {

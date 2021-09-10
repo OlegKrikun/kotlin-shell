@@ -3,6 +3,7 @@
 package ru.krikun.kotlin.shell
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collect
@@ -86,6 +87,7 @@ class ShellTest {
         parallel(read).output(4) { assertEquals("parallelTest", it) }.forEach(exitCodeCheck)
     }.let(exitCodeCheck)
 
+    @OptIn(FlowPreview::class)
     @Test
     fun `parallel flowOn shell call`() = shell(dir) {
         "mkdir parallelTest2"().let(exitCodeCheck)

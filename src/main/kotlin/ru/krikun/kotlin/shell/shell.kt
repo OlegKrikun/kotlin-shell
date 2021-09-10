@@ -1,5 +1,6 @@
 package ru.krikun.kotlin.shell
 
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.DEFAULT_CONCURRENCY
 import kotlinx.coroutines.flow.Flow
 import ru.krikun.kotlin.shell.internal.CallImpl
@@ -82,6 +83,7 @@ interface Call {
 }
 
 interface ParallelCall {
+    @OptIn(FlowPreview::class)
     suspend fun execute(concurrency: Int = DEFAULT_CONCURRENCY): List<Int?>
     suspend fun output(): Flow<Flow<Output>>
 }

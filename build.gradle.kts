@@ -1,10 +1,7 @@
-import com.jfrog.bintray.gradle.BintrayExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import java.util.Properties
 
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.5.30"
-    id("com.jfrog.bintray") version "1.8.4"
     id("com.github.ben-manes.versions") version "0.39.0"
     id("org.gradle.maven-publish")
 }
@@ -20,7 +17,7 @@ group = "ru.krikun.kotlin"
 version = "0.0.3"
 
 tasks.withType(KotlinCompile::class) {
-    kotlinOptions{
+    kotlinOptions {
         freeCompilerArgs = listOf("-Xopt-in=kotlin.RequiresOptIn")
     }
 }
@@ -37,27 +34,5 @@ configure<PublishingExtension> {
         artifact(sourcesJar) { classifier = "sources" }
     }
 }
-
-configure<BintrayExtension> {
-    val properties = properties("bintray.properties")
-    val bintrayUser: String = properties.getProperty("user")
-    val bintrayKey: String = properties.getProperty("key")
-
-    user = bintrayUser
-    key = bintrayKey
-
-    pkg.apply {
-        repo = "maven"
-        name = project.name
-        setLicenses("Apache-2.0")
-        websiteUrl = "https://github.com/OlegKrikun/kotlin-shell"
-        issueTrackerUrl = "https://github.com/OlegKrikun/kotlin-shell/issues"
-        vcsUrl = "https://github.com/OlegKrikun/kotlin-shell.git"
-
-        setPublications("maven")
-    }
-}
-
-fun properties(path: String) = Properties().apply { file(path).inputStream().use { load(it) } }
 
 tasks.wrapper { distributionType = Wrapper.DistributionType.ALL }

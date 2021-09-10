@@ -1,16 +1,5 @@
 # kotlin-shell
 
-## Get
-```kotlin
-repository {
-    maven(url = "http://dl.bintray.com/olegkrikun/maven")
-}
-
-dependency {
-    implementation("ru.krikun.kotlin:kotlin-shell:0.0.3")
-}
-```
-
 ## Usage
 
 ```kotlin

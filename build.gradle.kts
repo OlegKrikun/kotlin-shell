@@ -9,7 +9,7 @@ plugins {
     id("org.gradle.maven-publish")
 }
 
-repositories { jcenter() }
+repositories { mavenCentral() }
 
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")

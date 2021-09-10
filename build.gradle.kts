@@ -5,6 +5,7 @@ import java.util.Properties
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.3.61"
     id("com.jfrog.bintray") version "1.8.4"
+    id("com.github.ben-manes.versions") version "0.39.0"
     id("org.gradle.maven-publish")
 }
 

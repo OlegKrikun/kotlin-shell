@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.util.Properties
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.3.61"
+    id("org.jetbrains.kotlin.jvm") version "1.5.30"
     id("com.jfrog.bintray") version "1.8.4"
     id("com.github.ben-manes.versions") version "0.39.0"
     id("org.gradle.maven-publish")
@@ -12,12 +12,11 @@ plugins {
 repositories { jcenter() }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.3.61")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
 
-    testImplementation("junit:junit:4.12")
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.3.61")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.3.3")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.5.2")
 }
 
 group = "ru.krikun.kotlin"

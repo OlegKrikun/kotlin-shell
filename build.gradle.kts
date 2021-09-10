@@ -14,7 +14,7 @@ dependencies {
 }
 
 group = "ru.krikun.kotlin"
-version = "0.0.3"
+version = "0.0.4"
 
 tasks.withType(KotlinCompile::class) {
     kotlinOptions {

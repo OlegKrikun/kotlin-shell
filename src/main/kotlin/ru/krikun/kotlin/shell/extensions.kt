@@ -30,7 +30,7 @@ suspend fun Call.printOutput() = output { println(it) }
 /**
  * Return list of string or null if exit code is not success.
  */
-suspend inline fun Call.lines(successExitCode: Int = 0): List<String>? {
+suspend fun Call.lines(successExitCode: Int = 0): List<String>? {
     val list = mutableListOf<String>()
     return when (output().collectWithExitCode { list.add(it) }) {
         successExitCode -> list

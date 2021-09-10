@@ -13,12 +13,12 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
-fun shell(
+inline fun shell(
     workingDir: File = currentSystemWorkingDir(),
     environment: Map<String, String> = mapOf(),
     executable: String = Shell.SH,
     exitOnError: Boolean = true,
-    block: suspend Shell.() -> Unit
+    crossinline block: suspend Shell.() -> Unit
 ): Int = runBlocking { Shell(workingDir, environment, executable, exitOnError).apply { block() }.exit() }
 
 suspend inline fun Call.output(crossinline action: suspend (String) -> Unit): Int? {

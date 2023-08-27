@@ -21,7 +21,7 @@ internal class SudoCallImpl(
 
 internal class ParallelCallImpl(private val worker: Worker, private val cmd: List<String>) : ParallelCall {
     override suspend fun execute(concurrency: Int) = output().exitCodeList(concurrency)
-    override suspend fun output() = worker.run(cmd)
+    override fun output() = worker.run(cmd)
 }
 
 internal class SudoParallelCallImpl(
@@ -30,7 +30,7 @@ internal class SudoParallelCallImpl(
     private val cmd: List<String>
 ) : ParallelCall {
     override suspend fun execute(concurrency: Int) = output().exitCodeList(concurrency)
-    override suspend fun output() = worker.run(cmd.map { it.asUser(user) })
+    override fun output() = worker.run(cmd.map { it.asUser(user) })
 }
 
 private fun String.asUser(user: String) = "sudo -u $user $this"

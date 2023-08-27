@@ -31,6 +31,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.exitProcess
 
+private const val MAX_WORKER_THREAD = 3
+
 internal class Worker(
     workingDir: File,
     environment: Map<String, String>,
@@ -68,7 +70,7 @@ internal class Worker(
         val count = AtomicInteger(list.size)
         for (cmd in list) {
             val currentWorker = queue.poll() ?: Worker(workingDir, environment, executable, exitOnError)
-            val flow = currentWorker.run(cmd).onCompletion {
+            val flow = currentWorker.run(cmd).onCompletion { _ ->
                 queue.offer(currentWorker)
                 if (count.decrementAndGet() == 0) {
                     queue.forEach { it.exit() }
@@ -89,7 +91,7 @@ internal class Worker(
     ) {
         @OptIn(DelicateCoroutinesApi::class)
         private val scope = object : CoroutineScope {
-            override val coroutineContext = newFixedThreadPoolContext(3, "WorkerProcess") + Job()
+            override val coroutineContext = newFixedThreadPoolContext(MAX_WORKER_THREAD, "WorkerProcess") + Job()
         }
 
         private val process = ProcessBuilder(executable.split(" ")).apply {

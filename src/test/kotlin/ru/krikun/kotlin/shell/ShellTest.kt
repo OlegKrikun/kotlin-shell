@@ -13,14 +13,21 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.Timeout
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+
 class ShellTest {
     private val dir = createTempDir().apply { deleteOnExit() }
     private val exitCodeCheck: (Int?) -> Unit = { assertEquals(0, it) }
+
+    @JvmField
+    @Rule
+    val timeout = Timeout.seconds(20)
 
     @Test
     fun `single shell call`() = shell {

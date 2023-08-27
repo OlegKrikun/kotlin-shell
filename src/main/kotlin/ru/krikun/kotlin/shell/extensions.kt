@@ -1,9 +1,9 @@
 package ru.krikun.kotlin.shell
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.DEFAULT_CONCURRENCY
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flattenMerge
 import kotlinx.coroutines.flow.map
@@ -22,7 +22,7 @@ inline fun shell(
     crossinline block: suspend Shell.() -> Unit
 ): Int = runBlocking { Shell(workingDir, environment, executable, exitOnError).apply { block() }.exit() }
 
-suspend inline fun Call.output(crossinline action: suspend (String) -> Unit): Int? {
+suspend fun Call.output(action: suspend (String) -> Unit): Int? {
     return output().collectWithExitCode(action)
 }
 
@@ -40,9 +40,9 @@ suspend fun Call.lines(successExitCode: Int = 0): List<String>? {
 }
 
 @OptIn(FlowPreview::class)
-suspend inline fun ParallelCall.output(
+suspend fun ParallelCall.output(
     concurrency: Int = DEFAULT_CONCURRENCY,
-    crossinline action: suspend (String) -> Unit
+    action: suspend (String) -> Unit
 ): List<Int?> {
     return output().collectWithExitCodeList(concurrency, action)
 }
@@ -63,13 +63,13 @@ suspend inline fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
 
 suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
 
-@OptIn(FlowPreview::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int = DEFAULT_CONCURRENCY) = flattenMerge(concurrency)
     .filterIsInstance<Output.ExitCode>()
     .map { it.data }
     .toList()
 
-suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend (String) -> Unit): Int? {
+suspend fun Flow<Output>.collectWithExitCode(action: suspend (String) -> Unit): Int? {
     var exitCode: Int? = null
     onEach { (it as? Output.ExitCode)?.let { code -> exitCode = code.data } }
         .mapNotNull {
@@ -83,10 +83,10 @@ suspend inline fun Flow<Output>.collectWithExitCode(crossinline action: suspend 
     return exitCode
 }
 
-@OptIn(FlowPreview::class)
-suspend inline fun Flow<Flow<Output>>.collectWithExitCodeList(
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+suspend fun Flow<Flow<Output>>.collectWithExitCodeList(
     concurrency: Int = DEFAULT_CONCURRENCY,
-    crossinline action: suspend (String) -> Unit
+    action: suspend (String) -> Unit
 ): List<Int?> {
     val exitCodeList = mutableListOf<Int?>()
     flattenMerge(concurrency)

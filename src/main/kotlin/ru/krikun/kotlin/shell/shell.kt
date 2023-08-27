@@ -41,26 +41,26 @@ class Shell(
 
     suspend operator fun Iterable<String>.invoke(): Int? = call(joinCommandSequential()).execute()
 
-    suspend inline operator fun String.invoke(
-        crossinline action: suspend (String) -> Unit
+    suspend operator fun String.invoke(
+        action: suspend (String) -> Unit
     ): Int? = call(this).output(action)
 
-    suspend inline operator fun Iterable<String>.invoke(
-        crossinline action: suspend (String) -> Unit
+    suspend operator fun Iterable<String>.invoke(
+        action: suspend (String) -> Unit
     ): Int? = call(joinCommandSequential()).output(action)
 
     suspend fun String.asUser(user: String): Int? = asUser(user, this).execute()
 
     suspend fun Iterable<String>.asUser(user: String): Int? = asUser(user, joinCommandSequential()).execute()
 
-    suspend inline fun String.asUser(
+    suspend fun String.asUser(
         user: String,
-        crossinline action: suspend (String) -> Unit
+        action: suspend (String) -> Unit
     ) = asUser(user, this).output(action)
 
-    suspend inline fun Iterable<String>.asUser(
+    suspend fun Iterable<String>.asUser(
         user: String,
-        crossinline action: suspend (String) -> Unit
+        action: suspend (String) -> Unit
     ) = asUser(user, joinCommandSequential()).output(action)
 
     fun Iterable<String>.joinCommandSequential() = joinToString(" && ")

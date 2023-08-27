@@ -1,7 +1,7 @@
 package ru.krikun.kotlin.shell.internal
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -87,7 +87,7 @@ internal class Worker(
         environment: Map<String, String>,
         executable: String
     ) {
-        @OptIn(ObsoleteCoroutinesApi::class)
+        @OptIn(DelicateCoroutinesApi::class)
         private val scope = object : CoroutineScope {
             override val coroutineContext = newFixedThreadPoolContext(3, "WorkerProcess") + Job()
         }
@@ -99,7 +99,7 @@ internal class Worker(
 
         private val marker = UUID.randomUUID().toString()
 
-        @OptIn(ObsoleteCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+        @OptIn(ObsoleteCoroutinesApi::class)
         val output: BroadcastChannel<Output?> = scope.broadcast {
             val stdJob = launch { output(process.inputStream) { Output.Line(it) } }
             val errJob = launch { output(process.errorStream) { Output.Error(it) } }
@@ -124,7 +124,6 @@ internal class Worker(
             return process.waitFor()
         }
 
-        @OptIn(ExperimentalCoroutinesApi::class)
         private suspend fun ProducerScope<Output?>.output(
             stream: InputStream,
             factory: (String) -> Output

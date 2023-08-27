@@ -85,5 +85,5 @@ interface Call {
 interface ParallelCall {
     @OptIn(FlowPreview::class)
     suspend fun execute(concurrency: Int = DEFAULT_CONCURRENCY): List<Int?>
-    suspend fun output(): Flow<Flow<Output>>
+    fun output(): Flow<Flow<Output>>
 }

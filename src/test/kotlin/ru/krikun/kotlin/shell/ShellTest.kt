@@ -20,7 +20,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-
 class ShellTest {
     private val dir = createTempDir().apply { deleteOnExit() }
     private val exitCodeCheck: (Int?) -> Unit = { assertEquals(0, it) }

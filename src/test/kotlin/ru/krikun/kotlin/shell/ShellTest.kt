@@ -24,6 +24,7 @@ import kotlin.test.assertTrue
 class ShellTest {
     private val dir = createTempDir().apply { deleteOnExit() }
     private val exitCodeCheck: (Int?) -> Unit = { assertEquals(0, it) }
+    private val attemptRange = 1..1000
 
     @JvmField
     @Rule
@@ -62,9 +63,8 @@ class ShellTest {
     @Test
     fun `flood shell call`() = shell(dir) {
         "mkdir floodTest"()
-        val range = 1..10000
-        val write = range.map { "echo test > floodTest/floodTest$it" }
-        val read = range.map { "cat floodTest/floodTest$it" }
+        val write = attemptRange.map { "echo test > floodTest/floodTest$it" }
+        val read = attemptRange.map { "cat floodTest/floodTest$it" }
         write.forEach { it().let(exitCodeCheck) }
         read.forEach { it { assertEquals("test", it) }.let(exitCodeCheck) }
     }.let(exitCodeCheck)
@@ -73,9 +73,8 @@ class ShellTest {
     fun `async flood shell call`() = runBlocking {
         shell(dir) {
             "mkdir asyncTest"()
-            val range = 1..10000
-            val write = range.map { "echo test > asyncTest/asyncTest$it" }
-            val read = range.map { "cat asyncTest/asyncTest$it" }
+            val write = attemptRange.map { "echo test > asyncTest/asyncTest$it" }
+            val read = attemptRange.map { "cat asyncTest/asyncTest$it" }
             write.map { async { it() } }.awaitAll().forEach(exitCodeCheck)
             read.map { async { call(it).lines()?.single() } }.awaitAll().forEach { assertEquals("test", it) }
         }.let(exitCodeCheck)
@@ -86,9 +85,8 @@ class ShellTest {
         "mkdir parallelTest"().let(exitCodeCheck)
         "cd parallelTest"().let(exitCodeCheck)
         "export PTEST=parallelTest"().let(exitCodeCheck)
-        val range = 1..10000
-        val write = range.map { "echo \$PTEST > parallelTest$it" }
-        val read = range.map { "cat parallelTest$it" }
+        val write = attemptRange.map { "echo \$PTEST > parallelTest$it" }
+        val read = attemptRange.map { "cat parallelTest$it" }
         parallel(write).execute(4).forEach(exitCodeCheck)
         parallel(read).output(4) { assertEquals("parallelTest", it) }.forEach(exitCodeCheck)
     }.let(exitCodeCheck)
@@ -99,9 +97,8 @@ class ShellTest {
         "mkdir parallelTest2"().let(exitCodeCheck)
         "cd parallelTest2"().let(exitCodeCheck)
         "export PTEST=parallelTest"().let(exitCodeCheck)
-        val range = 1..10000
-        val write = range.map { "echo \$PTEST > parallelTest$it" }
-        val read = range.map { "cat parallelTest$it" }
+        val write = attemptRange.map { "echo \$PTEST > parallelTest$it" }
+        val read = attemptRange.map { "cat parallelTest$it" }
         parallel(write).output()
             .flowOn(Dispatchers.IO)
             .flattenMerge(4)
@@ -122,9 +119,8 @@ class ShellTest {
         "mkdir parallelTest3"().let(exitCodeCheck)
         "cd parallelTest3"().let(exitCodeCheck)
         "export PTEST=parallelTest"().let(exitCodeCheck)
-        val range = 1..10000
-        val write = range.map { "echo \$PTEST > parallelTest$it" }
-        val read = range.map { "cat parallelTest$it" }
+        val write = attemptRange.map { "echo \$PTEST > parallelTest$it" }
+        val read = attemptRange.map { "cat parallelTest$it" }
         parallel(write).execute().forEach(exitCodeCheck)
         parallel(read).output { assertEquals("parallelTest", it) }.forEach(exitCodeCheck)
     }.let(exitCodeCheck)

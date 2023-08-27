@@ -1,0 +1,9 @@
+complexity:
+  TooManyFunctions:
+    active: false
+naming:
+  MatchingDeclarationName:
+    active: false
+formatting:
+  Filename:
+    active: false

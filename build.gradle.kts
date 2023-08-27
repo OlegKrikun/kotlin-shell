@@ -16,6 +16,10 @@ dependencies {
 group = "ru.krikun.kotlin"
 version = "0.0.4"
 
+kotlin {
+    jvmToolchain(17)
+}
+
 tasks.withType(KotlinCompile::class) {
     kotlinOptions {
         freeCompilerArgs = listOf("-opt-in=kotlin.RequiresOptIn")

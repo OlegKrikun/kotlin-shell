@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.9.10"
     id("com.github.ben-manes.versions") version "0.47.0"
@@ -18,12 +16,6 @@ version = "0.0.4"
 
 kotlin {
     jvmToolchain(17)
-}
-
-tasks.withType(KotlinCompile::class) {
-    kotlinOptions {
-        freeCompilerArgs = listOf("-opt-in=kotlin.RequiresOptIn")
-    }
 }
 
 val sourcesJar = task<Jar>("sourcesJar") {

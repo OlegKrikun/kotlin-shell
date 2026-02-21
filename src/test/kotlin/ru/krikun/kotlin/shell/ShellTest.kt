@@ -7,6 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapMerge
 import kotlinx.coroutines.flow.flattenMerge
 import kotlinx.coroutines.flow.flowOn
@@ -129,4 +130,28 @@ class ShellTest {
     fun `exit shell call`() = runBlocking {
         (1..10).map { Shell(dir) }.forEach { assertEquals(it.exit(), 0) }
     }
+
+    @Test
+    fun `semaphore released after flow cancellation`() = shell(dir) {
+        // Cancel flow collection after first output element.
+        // Without try-finally on semaphore, the next command would deadlock.
+        call("echo line1 && echo line2").output().first()
+
+        // This must not hang — semaphore should be released
+        val result = call("echo ok").lines()
+        assertEquals(listOf("ok"), result)
+    }.let(exitCodeCheck)
+
+    @Test
+    fun `failed command does not block next command`() = shell(
+        workingDir = dir,
+        exitOnError = false,
+    ) {
+        val exitCode = "false"()
+        assertEquals(1, exitCode)
+
+        // Must still work after a failed command
+        val result = call("echo still-alive").lines()
+        assertEquals(listOf("still-alive"), result)
+    }.let(exitCodeCheck)
 }

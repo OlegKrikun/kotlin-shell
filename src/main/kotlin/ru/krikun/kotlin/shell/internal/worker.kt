@@ -42,16 +42,21 @@ internal class Worker(
 
     fun run(cmd: String): Flow<Output> = flow<Output> {
         semaphore.acquire()
-        process.output
-            .onSubscription { process.input.send(cmd) }
-            .takeWhile { it != null }
-            .collect { output ->
-                output?.let {
-                    it.takeIf { exitOnError }?.let { o -> (o as? Output.ExitCode)?.exitOnError() }
-                    emit(it)
+        try {
+            process.output
+                .onSubscription { process.input.send(cmd) }
+                .takeWhile { it != null }
+                .collect { output ->
+                    output?.let {
+                        it.takeIf { exitOnError }?.let { o ->
+                            (o as? Output.ExitCode)?.exitOnError()
+                        }
+                        emit(it)
+                    }
                 }
-            }
-        semaphore.release()
+        } finally {
+            semaphore.release()
+        }
     }
 
     fun run(list: List<String>): Flow<Flow<Output>> = flow {

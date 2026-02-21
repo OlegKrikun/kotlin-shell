@@ -52,7 +52,7 @@ class ShellTest {
             "mkdir sequentialTest",
             "touch sequentialTest/sequentialTest1",
             "touch sequentialTest/sequentialTest2",
-            "ls sequentialTest"
+            "ls sequentialTest",
         ).lines()
         assertNotNull(result)
         assertTrue(result.any { it == "sequentialTest1" })
@@ -75,7 +75,8 @@ class ShellTest {
             val write = attemptRange.map { "echo test > asyncTest/asyncTest$it" }
             val read = attemptRange.map { "cat asyncTest/asyncTest$it" }
             write.map { async { it() } }.awaitAll().forEach(exitCodeCheck)
-            read.map { async { call(it).lines()?.single() } }.awaitAll().forEach { assertEquals("test", it) }
+            read.map { async { call(it).lines()?.single() } }
+                .awaitAll().forEach { assertEquals("test", it) }
         }.let(exitCodeCheck)
     }
 

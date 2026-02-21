@@ -13,13 +13,16 @@ internal class CallImpl(private val worker: Worker, private val cmd: String) : C
 internal class SudoCallImpl(
     private val worker: Worker,
     private val user: String,
-    private val cmd: String
+    private val cmd: String,
 ) : Call {
     override suspend fun execute() = output().exitCode()
     override fun output() = worker.run(cmd.asUser(user))
 }
 
-internal class ParallelCallImpl(private val worker: Worker, private val cmd: List<String>) : ParallelCall {
+internal class ParallelCallImpl(
+    private val worker: Worker,
+    private val cmd: List<String>,
+) : ParallelCall {
     override suspend fun execute(concurrency: Int) = output().exitCodeList(concurrency)
     override fun output() = worker.run(cmd)
 }
@@ -27,7 +30,7 @@ internal class ParallelCallImpl(private val worker: Worker, private val cmd: Lis
 internal class SudoParallelCallImpl(
     private val worker: Worker,
     private val user: String,
-    private val cmd: List<String>
+    private val cmd: List<String>,
 ) : ParallelCall {
     override suspend fun execute(concurrency: Int) = output().exitCodeList(concurrency)
     override fun output() = worker.run(cmd.map { it.asUser(user) })

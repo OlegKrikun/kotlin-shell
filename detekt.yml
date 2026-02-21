@@ -1,3 +1,6 @@
+style:
+  MaxLineLength:
+    maxLineLength: 100
 complexity:
   TooManyFunctions:
     active: false
@@ -7,15 +10,7 @@ naming:
 ktlint:
   Filename:
     active: false
-  TrailingCommaOnDeclarationSite:
-    active: false
-  TrailingCommaOnCallSite:
-    active: false
   FunctionSignature:
     active: false
   ClassSignature:
-    active: false
-  FunctionExpressionBody:
-    active: false
-  BlankLineBetweenWhenConditions:
     active: false

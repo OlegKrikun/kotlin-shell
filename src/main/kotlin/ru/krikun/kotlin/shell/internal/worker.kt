@@ -34,7 +34,7 @@ internal class Worker(
     workingDir: File,
     environment: Map<String, String>,
     private val executable: String,
-    private val exitOnError: Boolean
+    private val exitOnError: Boolean,
 ) {
     private val semaphore = Semaphore(1)
 
@@ -63,7 +63,8 @@ internal class Worker(
         val queue = ConcurrentLinkedQueue<Worker>()
         val count = AtomicInteger(list.size)
         for (cmd in list) {
-            val currentWorker = queue.poll() ?: Worker(workingDir, environment, executable, exitOnError)
+            val currentWorker = queue.poll()
+                ?: Worker(workingDir, environment, executable, exitOnError)
             val flow = currentWorker.run(cmd).onCompletion { _ ->
                 queue.offer(currentWorker)
                 if (count.decrementAndGet() == 0) {
@@ -76,16 +77,21 @@ internal class Worker(
 
     fun exit() = process.exit()
 
-    private fun Output.ExitCode.exitOnError() = (data ?: 1).takeIf { it != 0 }?.let { exitProcess(it) }
+    private fun Output.ExitCode.exitOnError() = (data ?: 1)
+        .takeIf { it != 0 }
+        ?.let { exitProcess(it) }
 
     private class WorkerProcess(
         workingDir: File,
         environment: Map<String, String>,
-        executable: String
+        executable: String,
     ) {
         @OptIn(DelicateCoroutinesApi::class)
         private val scope = object : CoroutineScope {
-            override val coroutineContext = newFixedThreadPoolContext(MAX_WORKER_THREAD, "WorkerProcess") + Job()
+            override val coroutineContext = newFixedThreadPoolContext(
+                MAX_WORKER_THREAD,
+                "WorkerProcess",
+            ) + Job()
         }
 
         private val process = ProcessBuilder(executable.split(" ")).apply {
@@ -119,7 +125,7 @@ internal class Worker(
 
         private suspend fun readStream(
             stream: InputStream,
-            factory: (String) -> Output
+            factory: (String) -> Output,
         ) = stream.bufferedReader().lineSequence().forEach { line ->
             when {
                 line.contains(marker) -> {
@@ -128,6 +134,7 @@ internal class Worker(
                     output.emit(Output.ExitCode(list.findExitCode()))
                     output.emit(null)
                 }
+
                 else -> output.emit(factory(line))
             }
         }
@@ -138,9 +145,13 @@ internal class Worker(
             flush()
         }
 
-        private fun String.withMarker(marker: String) = "$this && echo $marker$? || echo $marker$? 1>&2"
+        private fun String.withMarker(
+            marker: String,
+        ) = "$this && echo $marker$? || echo $marker$? 1>&2"
 
-        private fun List<String>.findLastOutputLine() = takeIf { it.size > 1 }?.first()?.takeIf { it.isNotEmpty() }
+        private fun List<String>.findLastOutputLine() = takeIf { it.size > 1 }
+            ?.first()
+            ?.takeIf { it.isNotEmpty() }
 
         private fun List<String>.findExitCode() = last().toIntOrNull()
     }

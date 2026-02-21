@@ -3,21 +3,18 @@ package ru.krikun.kotlin.shell.internal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.ObsoleteCoroutinesApi
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.SendChannel
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.broadcast
-import kotlinx.coroutines.channels.consume
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newFixedThreadPoolContext
@@ -43,20 +40,17 @@ internal class Worker(
 
     private val process = WorkerProcess(workingDir, environment, executable)
 
-    @OptIn(ObsoleteCoroutinesApi::class)
     fun run(cmd: String): Flow<Output> = flow<Output> {
         semaphore.acquire()
-        process.output.openSubscription().apply {
-            process.input.send(cmd)
-            consume {
-                var output = receive()
-                while (output != null) {
-                    output.takeIf { exitOnError }?.let { (it as? Output.ExitCode)?.exitOnError() }
-                    emit(output)
-                    output = receive()
+        process.output
+            .onSubscription { process.input.send(cmd) }
+            .takeWhile { it != null }
+            .collect { output ->
+                output?.let {
+                    it.takeIf { exitOnError }?.let { o -> (o as? Output.ExitCode)?.exitOnError() }
+                    emit(it)
                 }
             }
-        }
         semaphore.release()
     }
 
@@ -101,14 +95,11 @@ internal class Worker(
 
         private val marker = UUID.randomUUID().toString()
 
-        @OptIn(ObsoleteCoroutinesApi::class)
-        val output: BroadcastChannel<Output?> = scope.broadcast {
-            val stdJob = launch { output(process.inputStream) { Output.Line(it) } }
-            val errJob = launch { output(process.errorStream) { Output.Error(it) } }
-            awaitClose {
-                stdJob.cancel()
-                errJob.cancel()
-            }
+        val output = MutableSharedFlow<Output?>(extraBufferCapacity = Channel.UNLIMITED)
+
+        init {
+            scope.launch { readStream(process.inputStream) { Output.Line(it) } }
+            scope.launch { readStream(process.errorStream) { Output.Error(it) } }
         }
 
         val input: SendChannel<String> = Channel<String>().also { channel ->
@@ -126,18 +117,18 @@ internal class Worker(
             return process.waitFor()
         }
 
-        private suspend fun ProducerScope<Output?>.output(
+        private suspend fun readStream(
             stream: InputStream,
             factory: (String) -> Output
         ) = stream.bufferedReader().lineSequence().forEach { line ->
             when {
                 line.contains(marker) -> {
                     val list = line.split(marker, limit = 2)
-                    list.findLastOutputLine()?.let { send(factory(it)) }
-                    send(Output.ExitCode(list.findExitCode()))
-                    send(null)
+                    list.findLastOutputLine()?.let { output.emit(factory(it)) }
+                    output.emit(Output.ExitCode(list.findExitCode()))
+                    output.emit(null)
                 }
-                else -> send(factory(line))
+                else -> output.emit(factory(line))
             }
         }
 

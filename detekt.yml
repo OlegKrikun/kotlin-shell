@@ -4,6 +4,18 @@ complexity:
 naming:
   MatchingDeclarationName:
     active: false
-formatting:
+ktlint:
   Filename:
+    active: false
+  TrailingCommaOnDeclarationSite:
+    active: false
+  TrailingCommaOnCallSite:
+    active: false
+  FunctionSignature:
+    active: false
+  ClassSignature:
+    active: false
+  FunctionExpressionBody:
+    active: false
+  BlankLineBetweenWhenConditions:
     active: false

@@ -588,4 +588,38 @@ class ShellTest {
         val s = Shell(dir)
         assertEquals(0, s.exit())
     }
+
+    @Test
+    fun `shell cleans up process on exception`() {
+        val pidHolder = mutableListOf<String>()
+        runCatching {
+            shell(dir) {
+                val p = call("echo \$\$").lines()!!.single()
+                pidHolder.add(p)
+                error("boom")
+            }
+        }
+        assertTrue(pidHolder.isNotEmpty())
+        val alive = ProcessBuilder("kill", "-0", pidHolder.single())
+            .start().waitFor()
+        assertTrue(alive != 0, "process should be dead")
+    }
+
+    @Test
+    fun `exit is idempotent`() = runBlocking {
+        val shell = Shell(dir)
+        shell.call("echo test").lines()
+        val code1 = shell.exit()
+        val code2 = shell.exit()
+        assertEquals(0, code1)
+        assertEquals(0, code2)
+    }
+
+    @Test
+    fun `close after exit does not throw`() = runBlocking {
+        val shell = Shell(dir)
+        shell.call("echo test").lines()
+        shell.exit()
+        shell.close()
+    }
 }

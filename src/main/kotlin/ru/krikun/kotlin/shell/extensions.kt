@@ -21,8 +21,13 @@ inline fun shell(
     exitOnError: Boolean = true,
     crossinline block: suspend Shell.() -> Unit,
 ): Int = runBlocking {
-    Shell(workingDir, environment, executable, exitOnError)
-        .apply { block() }.exit()
+    val shell = Shell(workingDir, environment, executable, exitOnError)
+    try {
+        shell.block()
+        shell.exit()
+    } finally {
+        shell.close()
+    }
 }
 
 suspend fun Call.output(

@@ -18,6 +18,7 @@ class Shell(
     exitOnError: Boolean = true,
 ) : Closeable {
     private val worker = Worker(workingDir, environment, executable, exitOnError)
+    private val exitCode by lazy { worker.exit() }
 
     fun call(cmd: String): Call = CallImpl(worker, cmd)
 
@@ -37,7 +38,7 @@ class Shell(
         cmd: List<String>,
     ): ParallelCall = SudoParallelCallImpl(worker, user, cmd)
 
-    fun exit(): Int = worker.exit()
+    fun exit(): Int = exitCode
 
     override fun close() {
         exit()

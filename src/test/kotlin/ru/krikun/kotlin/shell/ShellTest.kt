@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
@@ -649,5 +650,58 @@ class ShellTest {
             }
         }
         assertTrue(true)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `asUser rejects invalid username`() {
+        shell(workingDir = dir) {
+            "echo test".asUser("user; rm -rf /")
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `asUser rejects empty username`() {
+        shell(workingDir = dir) {
+            "echo test".asUser("")
+        }
+    }
+
+    @Test
+    fun `asUser wraps compound commands correctly`() {
+        Assume.assumeTrue(
+            "sudo not available",
+            ProcessBuilder("sudo", "-n", "true")
+                .start().waitFor() == 0,
+        )
+        val user = System.getProperty("user.name")
+        shell(workingDir = dir) {
+            val result = call("echo a && echo b")
+                .output().toList()
+                .filterIsInstance<Output.Line>()
+                .map { it.data }
+            assertEquals(listOf("a", "b"), result)
+
+            val sudoResult = asUser(user, "echo a && echo b")
+                .output().toList()
+                .filterIsInstance<Output.Line>()
+                .map { it.data }
+            assertEquals(listOf("a", "b"), sudoResult)
+        }
+    }
+
+    @Test
+    fun `asUser handles single quotes in command`() {
+        Assume.assumeTrue(
+            "sudo not available",
+            ProcessBuilder("sudo", "-n", "true")
+                .start().waitFor() == 0,
+        )
+        val user = System.getProperty("user.name")
+        shell(workingDir = dir) {
+            val result = asUser(user, "echo 'hello world'")
+                .output().toList()
+                .filterIsInstance<Output.Line>()
+            assertEquals("hello world", result.single().data)
+        }
     }
 }

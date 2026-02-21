@@ -36,4 +36,13 @@ internal class SudoParallelCallImpl(
     override fun output() = worker.run(cmd.map { it.asUser(user) })
 }
 
-private fun String.asUser(user: String) = "sudo -u $user $this"
+private fun String.asUser(user: String): String {
+    require(
+        user.isNotEmpty() &&
+            user.all {
+                it.isLetterOrDigit() || it == '_' || it == '-' || it == '.'
+            },
+    ) { "Invalid user name: $user" }
+    val escaped = replace("'", "'\\''")
+    return "sudo -u $user -- sh -c '$escaped'"
+}

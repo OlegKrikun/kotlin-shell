@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapMerge
@@ -741,4 +742,51 @@ class ShellTest {
             "threads leaked: before=$before after=$after",
         )
     }
+
+    @Test
+    fun `large output with bounded buffer`() = shell(dir) {
+        val result = call("seq 1 10000").lines()
+        assertNotNull(result)
+        assertEquals(10000, result.size)
+        assertEquals("1", result.first())
+        assertEquals("10000", result.last())
+    }.let(exitCodeCheck)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `parallel output flow can be collected twice`() = shell(dir) {
+        val flow = parallel(listOf("echo a", "echo b")).output()
+
+        val r1 = flow.flattenMerge(2)
+            .filterIsInstance<Output.Line>()
+            .map { it.data }
+            .toList()
+            .sorted()
+
+        val r2 = flow.flattenMerge(2)
+            .filterIsInstance<Output.Line>()
+            .map { it.data }
+            .toList()
+            .sorted()
+
+        assertEquals(listOf("a", "b"), r1)
+        assertEquals(listOf("a", "b"), r2)
+    }.let(exitCodeCheck)
+
+    @Test
+    fun `flow completes on kill during large output`() =
+        runBlocking {
+            val shell = Shell(dir, exitOnError = false)
+            val pid = shell.call("echo \$\$").lines()?.single()
+            assertNotNull(pid)
+
+            val job = async {
+                shell.call("seq 1 999999").output().toList()
+            }
+            delay(100)
+            ProcessBuilder("kill", "-9", pid)
+                .start().waitFor()
+            job.await()
+            shell.close()
+        }
 }

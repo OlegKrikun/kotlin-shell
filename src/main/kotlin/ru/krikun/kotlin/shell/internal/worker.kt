@@ -1,5 +1,6 @@
 package ru.krikun.kotlin.shell.internal
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
@@ -9,9 +10,9 @@ import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.flow.takeWhile
@@ -30,6 +31,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val MAX_WORKER_THREAD = 3
+private const val OUTPUT_BUFFER_SIZE = 4096
 
 internal class Worker(
     workingDir: File,
@@ -41,31 +43,41 @@ internal class Worker(
 
     private val process = WorkerProcess(workingDir, environment, executable)
 
-    fun run(cmd: String): Flow<Output> = flow<Output> {
+    fun run(cmd: String): Flow<Output> = channelFlow {
         semaphore.acquire()
         try {
-            process.output
-                .onSubscription { process.input.send(cmd) }
-                .takeWhile { it != null }
-                .collect { output ->
-                    output?.let {
-                        it.takeIf { exitOnError }?.let { o ->
-                            (o as? Output.ExitCode)?.exitOnError()
+            val collectJob = launch {
+                process.output
+                    .onSubscription { process.input.send(cmd) }
+                    .takeWhile { it != null }
+                    .collect { output ->
+                        output?.let {
+                            it.takeIf { exitOnError }?.let { o ->
+                                (o as? Output.ExitCode)
+                                    ?.exitOnError()
+                            }
+                            send(it)
                         }
-                        emit(it)
                     }
-                }
+            }
+            val deathJob = launch {
+                process.processDeath.await()
+                collectJob.cancel()
+            }
+            collectJob.join()
+            deathJob.cancel()
         } finally {
             semaphore.release()
         }
     }
 
-    fun run(list: List<String>): Flow<Flow<Output>> {
+    fun run(list: List<String>): Flow<Flow<Output>> = flow {
         val allWorkers = ConcurrentLinkedQueue<Worker>()
         val pool = ConcurrentLinkedQueue<Worker>()
         val remaining = AtomicInteger(list.size)
 
-        return flow {
+        var success = false
+        try {
             val wd = run("pwd")
                 .filterIsInstance<Output.Line>()
                 .single().data.let { File(it) }
@@ -92,8 +104,9 @@ internal class Worker(
                 }
                 emit(innerFlow)
             }
-        }.onCompletion { cause ->
-            if (cause != null) {
+            success = true
+        } finally {
+            if (!success) {
                 allWorkers.forEach { it.exit() }
             }
         }
@@ -125,7 +138,11 @@ internal class Worker(
 
         private val marker = UUID.randomUUID().toString()
 
-        val output = MutableSharedFlow<Output?>(extraBufferCapacity = Channel.UNLIMITED)
+        val processDeath = CompletableDeferred<Unit>()
+
+        val output = MutableSharedFlow<Output?>(
+            extraBufferCapacity = OUTPUT_BUFFER_SIZE,
+        )
 
         init {
             scope.launch { readStream(process.inputStream) { Output.Line(it) } }
@@ -142,7 +159,7 @@ internal class Worker(
                         writer.line("exit")
                     }
                 } catch (_: IOException) {
-                    output.tryEmit(null)
+                    processDeath.complete(Unit)
                     channel.close()
                 }
             }
@@ -150,6 +167,7 @@ internal class Worker(
 
         fun exit(): Int {
             input.close()
+            processDeath.complete(Unit)
             scope.cancel()
             val exitCode = process.waitFor()
             dispatcher.close()
@@ -163,7 +181,7 @@ internal class Worker(
             try {
                 reader.lineSequence().forEach { processLine(it, factory) }
             } finally {
-                output.tryEmit(null)
+                processDeath.complete(Unit)
             }
         }
 

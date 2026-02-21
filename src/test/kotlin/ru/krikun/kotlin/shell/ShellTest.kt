@@ -34,6 +34,11 @@ class ShellTest {
     @Rule
     val timeout = Timeout.seconds(20)
 
+    @org.junit.After
+    fun cleanup() {
+        dir.deleteRecursively()
+    }
+
     @Test
     fun `single shell call`() = shell {
         val result = call("echo foo").lines()
@@ -43,13 +48,20 @@ class ShellTest {
     }.let(exitCodeCheck)
 
     @Test
-    fun `git shell call`() = shell(dir) {
-        "git clone git@github.com:OlegKrikun/kotlin-shell.git"().let(exitCodeCheck)
-        "cd kotlin-shell"().let(exitCodeCheck)
-        val result = call("ls").lines()
-        assertNotNull(result)
-        assertTrue(result.any { it == "README.md" })
-    }.let(exitCodeCheck)
+    fun `git shell call`() {
+        Assume.assumeTrue(
+            "SSH not available for git clone",
+            ProcessBuilder("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=2", "git@github.com")
+                .start().waitFor() != 255,
+        )
+        shell(dir) {
+            "git clone git@github.com:OlegKrikun/kotlin-shell.git"().let(exitCodeCheck)
+            "cd kotlin-shell"().let(exitCodeCheck)
+            val result = call("ls").lines()
+            assertNotNull(result)
+            assertTrue(result.any { it == "README.md" })
+        }.let(exitCodeCheck)
+    }
 
     @Test
     fun `multiline output`() = shell(dir) {
@@ -789,4 +801,23 @@ class ShellTest {
             job.await()
             shell.close()
         }
+
+    @Test
+    fun `parallel with multiline env variable`() = shell(
+        workingDir = dir,
+        environment = mapOf("MULTI" to "line1\nline2"),
+    ) {
+        val codes = parallel(listOf("echo ok")).execute()
+        assertEquals(listOf(0), codes)
+    }.let(exitCodeCheck)
+
+    @Test
+    fun `early cancellation does not cause desync`() = shell(dir) {
+        call("seq 1 100").output().first()
+
+        (1..10).forEach { i ->
+            val result = call("echo cmd$i").lines()
+            assertEquals(listOf("cmd$i"), result)
+        }
+    }.let(exitCodeCheck)
 }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.flow.takeWhile
@@ -59,34 +60,42 @@ internal class Worker(
         }
     }
 
-    fun run(list: List<String>): Flow<Flow<Output>> = flow {
-        val workingDir = run("pwd").filterIsInstance<Output.Line>().single().data.let { File(it) }
-        val environment = run("env").filterIsInstance<Output.Line>().toList().associate {
-            it.data.split("=", limit = 2).let { (key, value) -> key to value }
-        }
-
+    fun run(list: List<String>): Flow<Flow<Output>> {
         val allWorkers = ConcurrentLinkedQueue<Worker>()
         val pool = ConcurrentLinkedQueue<Worker>()
         val remaining = AtomicInteger(list.size)
-        for (cmd in list) {
-            val innerFlow = flow<Output> {
-                val worker = pool.poll()
-                    ?: Worker(
-                        workingDir,
-                        environment,
-                        executable,
-                        exitOnError,
-                    ).also { allWorkers.add(it) }
-                try {
-                    worker.run(cmd).collect { emit(it) }
-                } finally {
-                    pool.offer(worker)
-                    if (remaining.decrementAndGet() == 0) {
-                        allWorkers.forEach { it.exit() }
+
+        return flow {
+            val wd = run("pwd")
+                .filterIsInstance<Output.Line>()
+                .single().data.let { File(it) }
+            val env = run("env")
+                .filterIsInstance<Output.Line>()
+                .toList().associate {
+                    it.data.split("=", limit = 2)
+                        .let { (k, v) -> k to v }
+                }
+
+            for (cmd in list) {
+                val innerFlow = flow<Output> {
+                    val worker = pool.poll()
+                        ?: Worker(wd, env, executable, exitOnError)
+                            .also { allWorkers.add(it) }
+                    try {
+                        worker.run(cmd).collect { emit(it) }
+                    } finally {
+                        pool.offer(worker)
+                        if (remaining.decrementAndGet() == 0) {
+                            allWorkers.forEach { it.exit() }
+                        }
                     }
                 }
+                emit(innerFlow)
             }
-            emit(innerFlow)
+        }.onCompletion { cause ->
+            if (cause != null) {
+                allWorkers.forEach { it.exit() }
+            }
         }
     }
 
@@ -102,12 +111,12 @@ internal class Worker(
         executable: String,
     ) {
         @OptIn(DelicateCoroutinesApi::class)
-        private val scope = object : CoroutineScope {
-            override val coroutineContext = newFixedThreadPoolContext(
-                MAX_WORKER_THREAD,
-                "WorkerProcess",
-            ) + Job()
-        }
+        private val dispatcher = newFixedThreadPoolContext(
+            MAX_WORKER_THREAD,
+            "WorkerProcess",
+        )
+
+        private val scope = CoroutineScope(dispatcher + Job())
 
         private val process = ProcessBuilder(executable.split(" ")).apply {
             directory(workingDir)
@@ -142,7 +151,9 @@ internal class Worker(
         fun exit(): Int {
             input.close()
             scope.cancel()
-            return process.waitFor()
+            val exitCode = process.waitFor()
+            dispatcher.close()
+            return exitCode
         }
 
         private suspend fun readStream(

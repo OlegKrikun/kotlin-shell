@@ -704,4 +704,41 @@ class ShellTest {
             assertEquals("hello world", result.single().data)
         }
     }
+
+    @Test
+    fun `threads do not leak after shell exit`() = runBlocking {
+        val before = Thread.activeCount()
+        repeat(20) {
+            val s = Shell(dir)
+            s.call("echo ok").lines()
+            s.exit()
+        }
+        Thread.sleep(200)
+        val after = Thread.activeCount()
+        assertTrue(
+            after <= before + 5,
+            "threads leaked: before=$before after=$after",
+        )
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `parallel cancel does not leak threads`() {
+        val before = Thread.activeCount()
+        shell(dir) {
+            val cmds = (1..10).map { "echo x" }
+            parallel(cmds).output()
+                .flatMapMerge(4) {
+                    it.filterIsInstance<Output.Line>()
+                }
+                .take(1)
+                .toList()
+        }
+        Thread.sleep(500)
+        val after = Thread.activeCount()
+        assertTrue(
+            after <= before + 5,
+            "threads leaked: before=$before after=$after",
+        )
+    }
 }

@@ -4,6 +4,8 @@ style:
 complexity:
   TooManyFunctions:
     active: false
+  LargeClass:
+    active: false
 naming:
   MatchingDeclarationName:
     active: false

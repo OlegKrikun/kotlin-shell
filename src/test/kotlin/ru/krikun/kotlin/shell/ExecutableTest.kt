@@ -17,11 +17,23 @@ class ExecutableTest {
     }
 
     @Test
-    fun `executable sh`() = shell(dir, executable = "sh", block = testBody).let(exitCodeCheck)
+    fun `executable sh`() = shell(
+        workingDir = dir,
+        executable = "sh",
+        block = testBody,
+    ).let(exitCodeCheck)
 
     @Test
-    fun `executable bin-sh`() = shell(dir, executable = "/bin/sh", block = testBody).let(exitCodeCheck)
+    fun `executable bin-sh`() = shell(
+        workingDir = dir,
+        executable = "/bin/sh",
+        block = testBody,
+    ).let(exitCodeCheck)
 
     @Test
-    fun `executable usr-bin-env sh`() = shell(dir, executable = "/usr/bin/env sh", block = testBody).let(exitCodeCheck)
+    fun `executable usr-bin-env sh`() = shell(
+        workingDir = dir,
+        executable = "/usr/bin/env sh",
+        block = testBody,
+    ).let(exitCodeCheck)
 }

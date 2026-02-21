@@ -19,12 +19,17 @@ inline fun shell(
     environment: Map<String, String> = mapOf(),
     executable: String = Shell.SH,
     exitOnError: Boolean = true,
-    crossinline block: suspend Shell.() -> Unit
-): Int = runBlocking { Shell(workingDir, environment, executable, exitOnError).apply { block() }.exit() }
-
-suspend fun Call.output(action: suspend (String) -> Unit): Int? {
-    return output().collectWithExitCode(action)
+    crossinline block: suspend Shell.() -> Unit,
+): Int = runBlocking {
+    Shell(workingDir, environment, executable, exitOnError).use { shell ->
+        shell.block()
+        shell.exit()
+    }
 }
+
+suspend fun Call.output(
+    action: suspend (String) -> Unit,
+): Int? = output().collectWithExitCode(action)
 
 suspend fun Call.printOutput() = output { println(it) }
 
@@ -42,17 +47,15 @@ suspend fun Call.lines(successExitCode: Int = 0): List<String>? {
 @OptIn(FlowPreview::class)
 suspend fun ParallelCall.output(
     concurrency: Int = DEFAULT_CONCURRENCY,
-    action: suspend (String) -> Unit
-): List<Int?> {
-    return output().collectWithExitCodeList(concurrency, action)
-}
+    action: suspend (String) -> Unit,
+): List<Int?> = output().collectWithExitCodeList(concurrency, action)
 
 suspend fun ParallelCall.printOutput() = output { println(it) }
 
 /**
  * Return list of string or null if any of exit codes is not success.
  */
-suspend inline fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
+suspend fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
     val list = mutableListOf<String>()
     val codes = output().collectWithExitCodeList { list.add(it) }
     return when {
@@ -64,7 +67,9 @@ suspend inline fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
 suspend fun Flow<Output>.exitCode() = filterIsInstance<Output.ExitCode>().single().data
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-suspend fun Flow<Flow<Output>>.exitCodeList(concurrency: Int = DEFAULT_CONCURRENCY) = flattenMerge(concurrency)
+suspend fun Flow<Flow<Output>>.exitCodeList(
+    concurrency: Int = DEFAULT_CONCURRENCY,
+) = flattenMerge(concurrency)
     .filterIsInstance<Output.ExitCode>()
     .map { it.data }
     .toList()
@@ -86,7 +91,7 @@ suspend fun Flow<Output>.collectWithExitCode(action: suspend (String) -> Unit): 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 suspend fun Flow<Flow<Output>>.collectWithExitCodeList(
     concurrency: Int = DEFAULT_CONCURRENCY,
-    action: suspend (String) -> Unit
+    action: suspend (String) -> Unit,
 ): List<Int?> {
     val exitCodeList = mutableListOf<Int?>()
     flattenMerge(concurrency)

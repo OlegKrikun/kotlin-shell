@@ -15,9 +15,10 @@ class Shell(
     workingDir: File = currentSystemWorkingDir(),
     environment: Map<String, String> = mapOf(),
     executable: String = SH,
-    exitOnError: Boolean = true
+    exitOnError: Boolean = true,
 ) : Closeable {
     private val worker = Worker(workingDir, environment, executable, exitOnError)
+    private val exitCode by lazy { worker.exit() }
 
     fun call(cmd: String): Call = CallImpl(worker, cmd)
 
@@ -25,13 +26,19 @@ class Shell(
 
     fun asUser(user: String, cmd: String): Call = SudoCallImpl(worker, user, cmd)
 
-    fun asUser(user: String, vararg cmd: String): Call = SudoCallImpl(worker, user, cmd.joinCommandSequential())
+    fun asUser(
+        user: String,
+        vararg cmd: String,
+    ): Call = SudoCallImpl(worker, user, cmd.joinCommandSequential())
 
     fun parallel(cmd: List<String>): ParallelCall = ParallelCallImpl(worker, cmd)
 
-    fun parallelAsUser(user: String, cmd: List<String>): ParallelCall = SudoParallelCallImpl(worker, user, cmd)
+    fun parallelAsUser(
+        user: String,
+        cmd: List<String>,
+    ): ParallelCall = SudoParallelCallImpl(worker, user, cmd)
 
-    fun exit(): Int = worker.exit()
+    fun exit(): Int = exitCode
 
     override fun close() {
         exit()
@@ -42,25 +49,27 @@ class Shell(
     suspend operator fun Iterable<String>.invoke(): Int? = call(joinCommandSequential()).execute()
 
     suspend operator fun String.invoke(
-        action: suspend (String) -> Unit
+        action: suspend (String) -> Unit,
     ): Int? = call(this).output(action)
 
     suspend operator fun Iterable<String>.invoke(
-        action: suspend (String) -> Unit
+        action: suspend (String) -> Unit,
     ): Int? = call(joinCommandSequential()).output(action)
 
     suspend fun String.asUser(user: String): Int? = asUser(user, this).execute()
 
-    suspend fun Iterable<String>.asUser(user: String): Int? = asUser(user, joinCommandSequential()).execute()
+    suspend fun Iterable<String>.asUser(
+        user: String,
+    ): Int? = asUser(user, joinCommandSequential()).execute()
 
     suspend fun String.asUser(
         user: String,
-        action: suspend (String) -> Unit
+        action: suspend (String) -> Unit,
     ) = asUser(user, this).output(action)
 
     suspend fun Iterable<String>.asUser(
         user: String,
-        action: suspend (String) -> Unit
+        action: suspend (String) -> Unit,
     ) = asUser(user, joinCommandSequential()).output(action)
 
     fun Iterable<String>.joinCommandSequential() = joinToString(" && ")
@@ -85,5 +94,9 @@ interface Call {
 interface ParallelCall {
     @OptIn(FlowPreview::class)
     suspend fun execute(concurrency: Int = DEFAULT_CONCURRENCY): List<Int?>
-    suspend fun output(): Flow<Flow<Output>>
+    fun output(): Flow<Flow<Output>>
 }
+
+class CommandFailedException(
+    val exitCode: Int,
+) : RuntimeException("Command failed with exit code $exitCode")

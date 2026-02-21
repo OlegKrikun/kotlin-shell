@@ -1,0 +1,18 @@
+style:
+  MaxLineLength:
+    maxLineLength: 100
+complexity:
+  TooManyFunctions:
+    active: false
+  LargeClass:
+    active: false
+naming:
+  MatchingDeclarationName:
+    active: false
+ktlint:
+  Filename:
+    active: false
+  FunctionSignature:
+    active: false
+  ClassSignature:
+    active: false

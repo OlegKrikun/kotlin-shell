@@ -20,6 +20,7 @@ import org.junit.Test
 import org.junit.rules.Timeout
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ShellTest {
@@ -183,5 +184,20 @@ class ShellTest {
             s.call("echo ok").lines()
             assertEquals(0, s.exit())
         }
+    }
+
+    @Test
+    fun `command does not hang when process is killed`() = runBlocking {
+        val s = Shell(dir, exitOnError = false)
+        val pid = s.call("echo \$\$").lines()?.single()
+        assertNotNull(pid)
+
+        // Kill the shell process
+        Runtime.getRuntime().exec(arrayOf("kill", "-9", pid))
+        Thread.sleep(200)
+
+        // Must not hang — returns null because process is dead
+        val result = s.call("echo test").lines()
+        assertNull(result)
     }
 }

@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.Semaphore
 import ru.krikun.kotlin.shell.Output
 import java.io.BufferedWriter
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -124,9 +125,16 @@ internal class Worker(
 
         val input: SendChannel<String> = Channel<String>().also { channel ->
             scope.launch {
-                process.outputStream.bufferedWriter().use { writer ->
-                    channel.consumeEach { writer.line(it.withMarker(marker)) }
-                    writer.line("exit")
+                try {
+                    process.outputStream.bufferedWriter().use { writer ->
+                        channel.consumeEach {
+                            writer.line(it.withMarker(marker))
+                        }
+                        writer.line("exit")
+                    }
+                } catch (_: IOException) {
+                    output.tryEmit(null)
+                    channel.close()
                 }
             }
         }
@@ -141,20 +149,27 @@ internal class Worker(
             stream: InputStream,
             factory: (String) -> Output,
         ) = stream.bufferedReader().use { reader ->
-            reader.lineSequence().forEach { line ->
-                when {
-                    line.contains(marker) -> {
-                        val list = line.split(marker, limit = 2)
-                        list.findLastOutputLine()?.let {
-                            output.emit(factory(it))
-                        }
-                        output.emit(Output.ExitCode(list.findExitCode()))
-                        output.emit(null)
-                    }
-
-                    else -> output.emit(factory(line))
-                }
+            try {
+                reader.lineSequence().forEach { processLine(it, factory) }
+            } finally {
+                output.tryEmit(null)
             }
+        }
+
+        private suspend fun processLine(
+            line: String,
+            factory: (String) -> Output,
+        ) = when {
+            line.contains(marker) -> {
+                val list = line.split(marker, limit = 2)
+                list.findLastOutputLine()?.let {
+                    output.emit(factory(it))
+                }
+                output.emit(Output.ExitCode(list.findExitCode()))
+                output.emit(null)
+            }
+
+            else -> output.emit(factory(line))
         }
 
         private fun BufferedWriter.line(line: String) {

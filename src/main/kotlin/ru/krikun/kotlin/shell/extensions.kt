@@ -21,12 +21,9 @@ inline fun shell(
     exitOnError: Boolean = true,
     crossinline block: suspend Shell.() -> Unit,
 ): Int = runBlocking {
-    val shell = Shell(workingDir, environment, executable, exitOnError)
-    try {
+    Shell(workingDir, environment, executable, exitOnError).use { shell ->
         shell.block()
         shell.exit()
-    } finally {
-        shell.close()
     }
 }
 
@@ -58,7 +55,7 @@ suspend fun ParallelCall.printOutput() = output { println(it) }
 /**
  * Return list of string or null if any of exit codes is not success.
  */
-suspend inline fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
+suspend fun ParallelCall.lines(successExitCode: Int = 0): List<String>? {
     val list = mutableListOf<String>()
     val codes = output().collectWithExitCodeList { list.add(it) }
     return when {

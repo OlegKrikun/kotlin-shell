@@ -15,7 +15,7 @@ dependencies {
 }
 
 group = "ru.krikun.kotlin"
-version = "0.0.4"
+version = findProperty("version") as String? ?: "debug"
 
 kotlin {
     jvmToolchain(21)
@@ -36,6 +36,16 @@ configure<PublishingExtension> {
     publications.create<MavenPublication>("maven") {
         from(components["java"])
         artifact(sourcesJar) { classifier = "sources" }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/OlegKrikun/kotlin-shell")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
     }
 }
 

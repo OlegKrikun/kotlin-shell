@@ -14,7 +14,7 @@ dependencies {
     detektPlugins("dev.detekt:detekt-rules-ktlint-wrapper:2.0.0-alpha.2")
 }
 
-group = "ru.krikun.kotlin"
+group = "ru.krikun"
 version = findProperty("version") as String? ?: "debug"
 
 kotlin {

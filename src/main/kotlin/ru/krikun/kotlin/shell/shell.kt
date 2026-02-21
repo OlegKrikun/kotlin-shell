@@ -96,3 +96,7 @@ interface ParallelCall {
     suspend fun execute(concurrency: Int = DEFAULT_CONCURRENCY): List<Int?>
     fun output(): Flow<Flow<Output>>
 }
+
+class CommandFailedException(
+    val exitCode: Int,
+) : RuntimeException("Command failed with exit code $exitCode")

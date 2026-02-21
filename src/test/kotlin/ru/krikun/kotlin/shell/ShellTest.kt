@@ -622,4 +622,32 @@ class ShellTest {
         shell.exit()
         shell.close()
     }
+
+    @Test(expected = CommandFailedException::class)
+    fun `exitOnError throws CommandFailedException`() {
+        shell(workingDir = dir, exitOnError = true) {
+            "false"()
+        }
+    }
+
+    @Test
+    fun `exitOnError exception contains exit code`() {
+        val result = runCatching {
+            shell(workingDir = dir, exitOnError = true) {
+                "(exit 42)"()
+            }
+        }
+        val e = result.exceptionOrNull() as CommandFailedException
+        assertEquals(42, e.exitCode)
+    }
+
+    @Test
+    fun `exitOnError does not kill JVM`() {
+        runCatching {
+            shell(workingDir = dir, exitOnError = true) {
+                "false"()
+            }
+        }
+        assertTrue(true)
+    }
 }

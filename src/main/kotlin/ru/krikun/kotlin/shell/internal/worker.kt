@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newFixedThreadPoolContext
 import kotlinx.coroutines.sync.Semaphore
+import ru.krikun.kotlin.shell.CommandFailedException
 import ru.krikun.kotlin.shell.Output
 import java.io.BufferedWriter
 import java.io.File
@@ -26,7 +27,6 @@ import java.io.InputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.system.exitProcess
 
 private const val MAX_WORKER_THREAD = 3
 
@@ -94,7 +94,7 @@ internal class Worker(
 
     private fun Output.ExitCode.exitOnError() = (data ?: 1)
         .takeIf { it != 0 }
-        ?.let { exitProcess(it) }
+        ?.let { throw CommandFailedException(it) }
 
     private class WorkerProcess(
         workingDir: File,

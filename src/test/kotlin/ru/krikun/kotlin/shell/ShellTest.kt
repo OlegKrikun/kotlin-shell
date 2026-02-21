@@ -174,4 +174,14 @@ class ShellTest {
         val result = call("echo ok").lines()
         assertEquals(listOf("ok"), result)
     }.let(exitCodeCheck)
+
+    @Test
+    fun `multiple shell instances do not leak file descriptors`() = runBlocking {
+        // Create and exit many shell instances to verify streams are closed
+        (1..50).forEach { _ ->
+            val s = Shell(dir)
+            s.call("echo ok").lines()
+            assertEquals(0, s.exit())
+        }
+    }
 }

@@ -140,16 +140,20 @@ internal class Worker(
         private suspend fun readStream(
             stream: InputStream,
             factory: (String) -> Output,
-        ) = stream.bufferedReader().lineSequence().forEach { line ->
-            when {
-                line.contains(marker) -> {
-                    val list = line.split(marker, limit = 2)
-                    list.findLastOutputLine()?.let { output.emit(factory(it)) }
-                    output.emit(Output.ExitCode(list.findExitCode()))
-                    output.emit(null)
-                }
+        ) = stream.bufferedReader().use { reader ->
+            reader.lineSequence().forEach { line ->
+                when {
+                    line.contains(marker) -> {
+                        val list = line.split(marker, limit = 2)
+                        list.findLastOutputLine()?.let {
+                            output.emit(factory(it))
+                        }
+                        output.emit(Output.ExitCode(list.findExitCode()))
+                        output.emit(null)
+                    }
 
-                else -> output.emit(factory(line))
+                    else -> output.emit(factory(line))
+                }
             }
         }
 

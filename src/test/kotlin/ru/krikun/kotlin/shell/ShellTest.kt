@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flatMapMerge
 import kotlinx.coroutines.flow.flattenMerge
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -153,5 +154,24 @@ class ShellTest {
         // Must still work after a failed command
         val result = call("echo still-alive").lines()
         assertEquals(listOf("still-alive"), result)
+    }.let(exitCodeCheck)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `parallel workers cleaned up on cancellation`() = shell(dir) {
+        "mkdir cancelTest"().let(exitCodeCheck)
+        val cmds = (1..20).map { "echo cancel$it" }
+
+        // Collect only first 2 results, cancelling the rest
+        val collected = parallel(cmds).output()
+            .flatMapMerge(4) { it.filterIsInstance<Output.Line>() }
+            .take(2)
+            .toList()
+
+        assertEquals(2, collected.size)
+
+        // Main shell must still work after parallel cancellation
+        val result = call("echo ok").lines()
+        assertEquals(listOf("ok"), result)
     }.let(exitCodeCheck)
 }

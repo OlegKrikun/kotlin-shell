@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.flow.takeWhile
@@ -65,18 +64,28 @@ internal class Worker(
             it.data.split("=", limit = 2).let { (key, value) -> key to value }
         }
 
-        val queue = ConcurrentLinkedQueue<Worker>()
-        val count = AtomicInteger(list.size)
+        val allWorkers = ConcurrentLinkedQueue<Worker>()
+        val pool = ConcurrentLinkedQueue<Worker>()
+        val remaining = AtomicInteger(list.size)
         for (cmd in list) {
-            val currentWorker = queue.poll()
-                ?: Worker(workingDir, environment, executable, exitOnError)
-            val flow = currentWorker.run(cmd).onCompletion { _ ->
-                queue.offer(currentWorker)
-                if (count.decrementAndGet() == 0) {
-                    queue.forEach { it.exit() }
+            val innerFlow = flow<Output> {
+                val worker = pool.poll()
+                    ?: Worker(
+                        workingDir,
+                        environment,
+                        executable,
+                        exitOnError,
+                    ).also { allWorkers.add(it) }
+                try {
+                    worker.run(cmd).collect { emit(it) }
+                } finally {
+                    pool.offer(worker)
+                    if (remaining.decrementAndGet() == 0) {
+                        allWorkers.forEach { it.exit() }
+                    }
                 }
             }
-            emit(flow)
+            emit(innerFlow)
         }
     }
 
